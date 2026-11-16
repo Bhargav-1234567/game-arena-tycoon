@@ -35,6 +35,7 @@ export class Game {
   private mousePos: THREE.Vector2 = new THREE.Vector2();
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private clock: THREE.Clock = new THREE.Clock();
+  private facilityRevenueTimer: number = 0;
 
   constructor(canvas: HTMLCanvasElement, uiContainer: HTMLElement) {
     this.sceneManager = new SceneManager(canvas);
@@ -84,6 +85,10 @@ export class Game {
       this.stationInspector.inspectReception(desk);
     };
 
+    this.placementSystem.onFacilitySelected = (facility) => {
+      this.stationInspector.inspectFacility(facility);
+    };
+
     this.setupPointerEvents(canvas);
   }
 
@@ -102,11 +107,23 @@ export class Game {
       '/assets/models/equipment/keyboards/keyboard_lvl1.glb',
       '/assets/models/equipment/mice/mouse_lvl1.glb',
       '/assets/models/equipment/speakers/speaker_lvl1.glb',
-      // Facilities (Lvl 1)
+      // Facilities (Lvl 1 - 4)
       '/assets/models/furniture/counters/reception_lvl1.glb',
+      '/assets/models/furniture/counters/reception_lvl2.glb',
+      '/assets/models/furniture/counters/reception_lvl3.glb',
+      '/assets/models/furniture/counters/reception_lvl4.glb',
       '/assets/models/business/arcade/arcade_lvl1.glb',
+      '/assets/models/business/arcade/arcade_lvl2.glb',
+      '/assets/models/business/arcade/arcade_lvl3.glb',
+      '/assets/models/business/arcade/arcade_lvl4.glb',
       '/assets/models/business/vending/vending_lvl1.glb',
+      '/assets/models/business/vending/vending_lvl2.glb',
+      '/assets/models/business/vending/vending_lvl3.glb',
+      '/assets/models/business/vending/vending_lvl4.glb',
       '/assets/models/furniture/sofas/sofa_lvl1.glb',
+      '/assets/models/furniture/sofas/sofa_lvl2.glb',
+      '/assets/models/furniture/sofas/sofa_lvl3.glb',
+      '/assets/models/furniture/sofas/sofa_lvl4.glb',
       // Characters & Animation Suite
       '/assets/models/characters/women/Animated Woman.glb',
       '/assets/models/characters/women/Suit.glb',
@@ -172,7 +189,7 @@ export class Game {
     await this.placementSystem.tryPlace();
 
     // 2. Setup Receptionist behind the reception desk facing entrance
-    await this.customerSystem.setupReceptionist(new THREE.Vector3(0, 0, 4));
+    await this.customerSystem.setupReceptionist();
 
     // 3. Station 1 on the left side
     this.placementSystem.setBuildItem(BUILDABLE_ITEMS.find((i) => i.id === 'station_bundle'));
@@ -273,6 +290,24 @@ export class Game {
     this.placementSystem.stations.forEach((station) => {
       station.update(elapsedTime);
     });
+
+    // Facility passive revenue tick (Every in-game hour ~ 15 real seconds)
+    this.facilityRevenueTimer += deltaTime;
+    if (this.facilityRevenueTimer >= 15.0) {
+      this.facilityRevenueTimer = 0;
+      this.placementSystem.facilities.forEach((fac) => {
+        const rev = fac.currentTier.hourlyRevenueBonus;
+        if (rev && rev > 0) {
+          this.economySystem.earn(rev);
+          const icon = fac.type === 'arcade' ? '🕹️' : '🥤';
+          this.floatingTextManager.spawn(
+            `+$${rev} ${icon}`,
+            fac.group.position.clone().add(new THREE.Vector3(0, 1.8, 0)),
+            fac.type === 'arcade' ? '#c084fc' : '#34d399'
+          );
+        }
+      });
+    }
 
     // Update TopBar HUD
     this.topBar.updateValues(this.customerSystem.getActiveCustomerCount());

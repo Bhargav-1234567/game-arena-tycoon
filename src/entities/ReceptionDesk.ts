@@ -120,15 +120,15 @@ export class ReceptionDesk {
   }
 
   public getStaffPosition(): THREE.Vector3 {
-    // Receptionist position behind desk
-    const local = new THREE.Vector3(0, 0, -0.95);
+    // Receptionist position behind desk (clear of counter edge so employee never clips table)
+    const local = new THREE.Vector3(0, 0, -1.35);
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(local);
   }
 
   public getCustomerQueuePosition(): THREE.Vector3 {
-    // Customer waiting spot in front of desk
-    const local = new THREE.Vector3(0, 0, 1.25);
+    // Customer waiting spot in front of desk (in open walkable floor aisle)
+    const local = new THREE.Vector3(0, 0, 1.85);
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(local);
   }

@@ -195,7 +195,14 @@ export class StatsModal {
           mouseLevel: s.currentMouse.level,
           speakerLevel: s.currentSpeaker.level
         })),
-        facilities: [],
+        facilities: Array.from(this.placement.facilities.values()).map((f) => ({
+          id: f.id,
+          itemId: f.type,
+          gridX: f.gridX,
+          gridZ: f.gridZ,
+          rotationIndex: f.rotationIndex,
+          level: f.currentTier.level
+        })),
         staff: this.staff.roles.map((r) => ({
           id: r.id,
           hiredCount: r.hiredCount

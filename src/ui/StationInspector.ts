@@ -1,5 +1,6 @@
 import { GamingStation } from '../entities/GamingStation.ts';
 import { ReceptionDesk, RECEPTION_TIERS } from '../entities/ReceptionDesk.ts';
+import { FacilityEntity } from '../entities/FacilityEntity.ts';
 import { EconomySystem } from '../systems/EconomySystem.ts';
 import { ParticleSystem } from '../services/ParticleSystem.ts';
 import { SoundManager } from '../services/SoundManager.ts';
@@ -17,8 +18,10 @@ export class StationInspector {
   private element: HTMLElement;
   private currentStation: GamingStation | null = null;
   private currentReception: ReceptionDesk | null = null;
+  private currentFacility: FacilityEntity | null = null;
   private economySystem: EconomySystem;
   private particleSystem?: ParticleSystem;
+  private isUpgrading: boolean = false;
 
   constructor(parent: HTMLElement, economySystem: EconomySystem, particleSystem?: ParticleSystem) {
     this.economySystem = economySystem;
@@ -29,8 +32,10 @@ export class StationInspector {
     parent.appendChild(this.element);
 
     this.economySystem.subscribe(() => {
+      if (this.isUpgrading) return;
       if (this.currentStation) this.renderStation();
       else if (this.currentReception) this.renderReception();
+      else if (this.currentFacility) this.renderFacility();
     });
   }
 
@@ -44,6 +49,7 @@ export class StationInspector {
 
   public inspectStation(station: GamingStation | null) {
     this.currentReception = null;
+    this.currentFacility = null;
     this.currentStation = station;
     if (!station) {
       this.element.style.display = 'none';
@@ -56,6 +62,7 @@ export class StationInspector {
 
   public inspectReception(reception: ReceptionDesk | null) {
     this.currentStation = null;
+    this.currentFacility = null;
     this.currentReception = reception;
     if (!reception) {
       this.element.style.display = 'none';
@@ -64,6 +71,19 @@ export class StationInspector {
 
     this.element.style.display = 'block';
     this.renderReception();
+  }
+
+  public inspectFacility(facility: FacilityEntity | null) {
+    this.currentStation = null;
+    this.currentReception = null;
+    this.currentFacility = facility;
+    if (!facility) {
+      this.element.style.display = 'none';
+      return;
+    }
+
+    this.element.style.display = 'block';
+    this.renderFacility();
   }
 
   private celebrateUpgrade(pos: THREE.Vector3, colorHex: number = 0x0d9488) {
@@ -139,6 +159,114 @@ export class StationInspector {
           this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
           this.celebrateUpgrade(r.group.position, 0x38bdf8);
           this.renderReception();
+        }
+      });
+    }
+  }
+
+  private renderFacility() {
+    if (!this.currentFacility) return;
+    const f = this.currentFacility;
+    const tiers = f.getTiers();
+    const nextTier = tiers.find((t) => t.level === f.currentTier.level + 1);
+
+    const typeConfig = {
+      arcade: {
+        badgeText: 'ARCADE',
+        badgeBg: '#8b5cf6',
+        themeHex: 0x8b5cf6,
+        icon: '🕹️',
+        title: 'Retro Arcade Cabinet',
+        metric2Label: 'Passive Income',
+        metric2Val: `+$${f.currentTier.hourlyRevenueBonus ?? 0}/hr 💵`
+      },
+      vending: {
+        badgeText: 'VENDING',
+        badgeBg: '#10b981',
+        themeHex: 0x10b981,
+        icon: '🥤',
+        title: 'Vending Machine',
+        metric2Label: 'Snack Revenue',
+        metric2Val: `+$${f.currentTier.hourlyRevenueBonus ?? 0}/hr 💵`
+      },
+      sofa: {
+        badgeText: 'LOUNGE',
+        badgeBg: '#f59e0b',
+        themeHex: 0xf59e0b,
+        icon: '🛋️',
+        title: 'Lounge Seating',
+        metric2Label: 'Guest Comfort',
+        metric2Val: `+${f.currentTier.level * 25}% Mood 😊`
+      }
+    }[f.type];
+
+    this.element.innerHTML = `
+      <div class="inspector-header">
+        <div class="inspector-title">
+          <span class="inspector-badge" style="background: ${typeConfig.badgeBg};">${typeConfig.badgeText}</span>
+          <h3>LEVEL ${f.currentTier.level}/4</h3>
+        </div>
+        <button id="close-inspector-btn" class="close-btn">✕</button>
+      </div>
+
+      <div class="inspector-status-card" style="background: rgba(15, 23, 42, 0.7); color: #f8fafc; border: 1px solid var(--border-color);">
+        <span class="status-dot" style="background: ${typeConfig.badgeBg};"></span>
+        <span class="status-text">${f.currentTier.name} ${typeConfig.icon}</span>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <span class="metric-label">Reputation Bonus</span>
+          <span class="metric-val text-teal">+${f.currentTier.reputationBonus} pts ⭐</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">${typeConfig.metric2Label}</span>
+          <span class="metric-val text-purple">${typeConfig.metric2Val}</span>
+        </div>
+      </div>
+
+      <div class="prop-info-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px;">
+        <span class="component-tag" style="color: ${typeConfig.badgeBg}; font-weight: 700;">Features & Perks:</span>
+        <p style="font-size: 12px; margin-top: 4px; line-height: 1.4; color: #cbd5e1;">${f.currentTier.perkDescription}</p>
+      </div>
+
+      <h4 class="section-title">${typeConfig.title} Upgrade</h4>
+
+      <div class="upgrade-list">
+        <div class="upgrade-row">
+          <div class="upgrade-info">
+            <span class="component-tag">${nextTier ? `Upgrade to Tier ${nextTier.level}/4` : 'Maximum Tier Reached'}</span>
+            <span class="component-name">${nextTier ? nextTier.name : 'Fully Maxed Out ' + typeConfig.icon}</span>
+          </div>
+          ${
+            nextTier
+              ? `<button id="upgrade-facility-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextTier.price) ? 'disabled' : ''}>
+                  Upgrade ($${nextTier.price})
+                </button>`
+              : `<span class="max-badge">MAX</span>`
+          }
+        </div>
+      </div>
+    `;
+
+    this.element.querySelector('#close-inspector-btn')?.addEventListener('click', () => {
+      this.inspectFacility(null);
+    });
+
+    if (nextTier) {
+      this.element.querySelector('#upgrade-facility-btn')?.addEventListener('click', async () => {
+        if (!this.economySystem.canAfford(nextTier.price)) return;
+        this.isUpgrading = true;
+        try {
+          if (this.economySystem.spend(nextTier.price)) {
+            const oldRep = f.currentTier.reputationBonus;
+            await f.upgrade(nextTier);
+            this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
+            this.celebrateUpgrade(f.group.position, typeConfig.themeHex);
+          }
+        } finally {
+          this.isUpgrading = false;
+          this.renderFacility();
         }
       });
     }

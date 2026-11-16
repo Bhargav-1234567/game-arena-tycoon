@@ -18,6 +18,7 @@ export interface SavedFacilityData {
   gridX: number;
   gridZ: number;
   rotationIndex: number;
+  level?: number;
 }
 
 export interface SavedStaffRoleData {

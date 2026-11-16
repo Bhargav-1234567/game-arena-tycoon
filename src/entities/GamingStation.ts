@@ -11,6 +11,71 @@ import {
   PeripheralUpgrade
 } from '../data/peripheral-upgrades.ts';
 
+export interface ComponentDimensions {
+  w: number;
+  d: number;
+  h: number;
+}
+
+export interface DeskSurfaceBounds {
+  frontZ: number;    // Usable front edge of tabletop surface where keyboard & mouse sit
+  backZ: number;     // Usable rear edge where monitor stand sits
+  rightX: number;    // Right-side anchor position for PC tower
+  maxRightX: number; // Absolute perimeter bound on the right so PC never hangs off
+  surfaceY: number;  // Tabletop height (0.720m)
+}
+
+// Measured usable desktop surface zones (accounting for oval curvature and bevels)
+export const DESK_SURFACES: Record<number, DeskSurfaceBounds> = {
+  1: { frontZ: 0.32, backZ: -0.30, rightX: 0.46, maxRightX: 0.65, surfaceY: 0.720 },
+  2: { frontZ: 0.38, backZ: -0.32, rightX: 0.50, maxRightX: 0.72, surfaceY: 0.720 },
+  3: { frontZ: 0.35, backZ: -0.32, rightX: 0.54, maxRightX: 0.78, surfaceY: 0.720 },
+  4: { frontZ: 0.28, backZ: -0.36, rightX: 0.55, maxRightX: 0.78, surfaceY: 0.720 }
+};
+
+export const CHAIR_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.544, d: 0.609, h: 0.850 },
+  2: { w: 0.539, d: 0.631, h: 0.950 },
+  3: { w: 0.584, d: 0.548, h: 1.060 },
+  4: { w: 0.844, d: 0.747, h: 1.180 }
+};
+
+export const MONITOR_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.480, d: 0.147, h: 0.363 },
+  2: { w: 0.580, d: 0.198, h: 0.525 },
+  3: { w: 0.700, d: 0.182, h: 0.609 },
+  4: { w: 0.880, d: 0.748, h: 0.645 }
+};
+
+export const KEYBOARD_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.400, d: 0.141, h: 0.023 },
+  2: { w: 0.460, d: 0.165, h: 0.023 },
+  3: { w: 0.520, d: 0.195, h: 0.020 },
+  4: { w: 0.580, d: 0.214, h: 0.030 }
+};
+
+export const MOUSE_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.065, d: 0.110, h: 0.027 },
+  2: { w: 0.072, d: 0.125, h: 0.044 },
+  3: { w: 0.084, d: 0.140, h: 0.094 },
+  4: { w: 0.101, d: 0.155, h: 0.133 }
+};
+
+// Level 4 CPU rotated facing front (W: 0.365m, D: 0.195m, H: 0.550m)
+export const PC_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.202, d: 0.422, h: 0.420 },
+  2: { w: 0.179, d: 0.433, h: 0.460 },
+  3: { w: 0.230, d: 0.539, h: 0.500 },
+  4: { w: 0.365, d: 0.195, h: 0.550 }
+};
+
+export const SPEAKER_DIMS: Record<number, ComponentDimensions> = {
+  1: { w: 0.123, d: 0.087, h: 0.160 },
+  2: { w: 0.096, d: 0.069, h: 0.200 },
+  3: { w: 0.106, d: 0.081, h: 0.240 },
+  4: { w: 0.156, d: 0.123, h: 0.280 }
+};
+
 export class GamingStation {
   public readonly id: string;
   public group: THREE.Group = new THREE.Group();
@@ -35,6 +100,9 @@ export class GamingStation {
   private keyboardMesh?: THREE.Group;
   private mouseMesh?: THREE.Group;
   private speakerMesh?: THREE.Group;
+
+  // Dynamically computed physical layout state
+  public computedChairZ: number = 0.66;
 
   // Selection & Highlight ring
   private selectionRing?: THREE.Mesh;
@@ -72,56 +140,141 @@ export class GamingStation {
     await this.build();
   }
 
-  public async build() {
-    const assetMgr = AssetManager.getInstance();
+  /**
+   * Recalculates exact physical positions ensuring EVERY object sits completely
+   * on the tabletop surface without overhang or floating.
+   */
+  public updateLayout() {
+    const desk = DESK_SURFACES[this.currentDesk.level] || DESK_SURFACES[1];
+    const chair = CHAIR_DIMS[this.currentChair.level] || CHAIR_DIMS[1];
+    const monitor = MONITOR_DIMS[this.currentMonitor.level] || MONITOR_DIMS[1];
+    const kb = KEYBOARD_DIMS[this.currentKeyboard.level] || KEYBOARD_DIMS[1];
+    const mouse = MOUSE_DIMS[this.currentMouse.level] || MOUSE_DIMS[1];
+    const pc = PC_DIMS[this.currentPC.level] || PC_DIMS[1];
+    const spk = SPEAKER_DIMS[this.currentSpeaker.level] || SPEAKER_DIMS[1];
 
-    // 1. Desk (origin at 0, 0, 0)
-    this.deskMesh = await assetMgr.loadModel(this.currentDesk.model);
-    this.deskMesh.position.set(0, 0, 0);
-    this.group.add(this.deskMesh);
+    const deskTopY = desk.surfaceY; // 0.720m tabletop surface
 
-    // 2. Chair (placed at Z = 0.55 facing the desk at -Z)
-    this.chairMesh = await assetMgr.loadModel(this.currentChair.model);
-    this.chairMesh.position.set(0, 0, 0.55);
-    this.group.add(this.chairMesh);
+    // 1. Desk: Origin at (0, 0, 0)
+    if (this.deskMesh) {
+      this.deskMesh.position.set(0, 0, 0);
+    }
 
-    // 3. PC Tower (placed on the right side of desk surface at X = 0.48, Y = 0.72, Z = -0.05)
-    this.pcMesh = await assetMgr.loadModel(this.currentPC.model);
-    this.pcMesh.position.set(0.48, 0.72, -0.05);
-    this.group.add(this.pcMesh);
+    // 2. Keyboard:
+    // Placed comfortably on the desk surface with a safe margin from the front edge.
+    // Guaranteed to stay 100% on the table with no overhang.
+    const wristMargin = 0.05;
+    const kbZ = desk.frontZ - wristMargin - kb.d / 2;
+    const kbX = -0.05; // Slightly left-aligned so typing cluster is centered
+    if (this.keyboardMesh) {
+      this.keyboardMesh.position.set(kbX, deskTopY, kbZ);
+    }
 
-    // 4. Monitor (center of desk surface at X = 0, Y = 0.72, Z = -0.15)
-    this.monitorMesh = await assetMgr.loadModel(this.currentMonitor.model);
-    this.monitorMesh.position.set(0, 0.72, -0.15);
-    this.group.add(this.monitorMesh);
+    // 3. Mouse:
+    // Placed on dedicated mousepad zone to the right of the keyboard.
+    // Matches the keyboard depth (Z) so it never overhangs the front curved rim.
+    const mouseGap = 0.08;
+    const mouseX = kbX + kb.w / 2 + mouseGap + mouse.w / 2;
+    const mouseZ = kbZ;
+    if (this.mouseMesh) {
+      this.mouseMesh.position.set(mouseX, deskTopY, mouseZ);
+    }
 
-    // 5. Keyboard (centered in front of monitor at X = -0.05, Y = 0.72, Z = 0.14)
-    this.keyboardMesh = await assetMgr.loadModel(this.currentKeyboard.model);
-    this.keyboardMesh.position.set(-0.05, 0.72, 0.14);
-    this.group.add(this.keyboardMesh);
+    // 4. PC Tower (CPU):
+    // Positioned safely on the right side of the desk surface towards the back.
+    // Clamped strictly within maxRightX so it NEVER floats off the table.
+    let pcX = Math.max(desk.rightX, mouseX + mouse.w / 2 + pc.w / 2 + 0.03);
+    if (pcX + pc.w / 2 > desk.maxRightX) {
+      pcX = desk.maxRightX - pc.w / 2;
+    }
+    const pcZ = -0.08;
+    if (this.pcMesh) {
+      this.pcMesh.position.set(pcX, deskTopY, pcZ);
+    }
 
-    // 6. Mouse (right of keyboard at X = 0.25, Y = 0.72, Z = 0.14)
-    this.mouseMesh = await assetMgr.loadModel(this.currentMouse.model);
-    this.mouseMesh.position.set(0.25, 0.72, 0.14);
-    this.group.add(this.mouseMesh);
+    // 5. Monitor:
+    // Positioned centered (or offset if ultra-wide requires lateral clearance for PC)
+    // Sits firmly on the desk surface behind the keyboard.
+    let monX = 0;
+    if (pcX - pc.w / 2 < monitor.w / 2 + 0.03) {
+      monX = Math.min(0, pcX - pc.w / 2 - monitor.w / 2 - 0.03);
+    }
+    const monZ = Math.min(desk.backZ + monitor.d / 2, kbZ - kb.d / 2 - 0.08 - monitor.d / 2);
+    // Move level 4 monitor on the Y axis so the display stand sits firmly on the desk
+    const monY = this.currentMonitor.level === 4 ? deskTopY - 0.20 : deskTopY;
+    if (this.monitorMesh) {
+      this.monitorMesh.position.set(monX, monY, monZ);
+    }
 
-    // 7. Speaker (left flank of monitor at X = -0.38, Y = 0.72, Z = -0.12)
-    this.speakerMesh = await assetMgr.loadModel(this.currentSpeaker.model);
-    this.speakerMesh.position.set(-0.38, 0.72, -0.12);
-    this.group.add(this.speakerMesh);
+    // 6. Speaker:
+    // Placed on the left flank of the monitor, positioned forward so it stays firmly on the desk surface.
+    let spkX = monX - (monitor.w / 2 + spk.w / 2 + 0.04);
+    const minSpkX = -desk.maxRightX + spk.w / 2 + 0.03;
+    spkX = Math.max(spkX, minSpkX);
+    // Move speaker forward (+Z direction) so it never hangs off the curved rear edge
+    const spkZ = Math.max(0.04, monZ + 0.22);
+    if (this.speakerMesh) {
+      this.speakerMesh.position.set(spkX, deskTopY, spkZ);
+    }
 
-    // 8. Selection Highlight Ring
-    const ringGeo = new THREE.RingGeometry(0.85, 0.95, 32);
+    // 7. Chair:
+    // Distance from table calculated from the table's front edge and chair depth.
+    // Sits pulled up to the desk so front of seat is naturally positioned for the gamer.
+    const seatGap = 0.03;
+    const chairZ = desk.frontZ + seatGap + chair.d / 2;
+    this.computedChairZ = chairZ;
+    if (this.chairMesh) {
+      this.chairMesh.position.set(0, 0, chairZ);
+    }
+
+    // 8. Update Selection Highlight Ring
+    this.updateSelectionRing(desk.maxRightX * 2, chairZ, chair.d);
+  }
+
+  private updateSelectionRing(deskW: number, chairZ: number, chairD: number) {
+    if (this.selectionRing) {
+      this.group.remove(this.selectionRing);
+      this.selectionRing.geometry.dispose();
+    }
+    const stationRadius = Math.max(deskW / 2 + 0.15, (chairZ + chairD / 2) * 0.72);
+    const ringGeo = new THREE.RingGeometry(stationRadius, stationRadius + 0.08, 32);
     ringGeo.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x0d9488,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.0
+      opacity: this.isSelected ? 0.9 : 0.0
     });
     this.selectionRing = new THREE.Mesh(ringGeo, ringMat);
     this.selectionRing.position.y = 0.02;
     this.group.add(this.selectionRing);
+  }
+
+  public async build() {
+    const assetMgr = AssetManager.getInstance();
+
+    this.deskMesh = await assetMgr.loadModel(this.currentDesk.model);
+    this.group.add(this.deskMesh);
+
+    this.chairMesh = await assetMgr.loadModel(this.currentChair.model);
+    this.group.add(this.chairMesh);
+
+    this.pcMesh = await assetMgr.loadModel(this.currentPC.model);
+    this.group.add(this.pcMesh);
+
+    this.monitorMesh = await assetMgr.loadModel(this.currentMonitor.model);
+    this.group.add(this.monitorMesh);
+
+    this.keyboardMesh = await assetMgr.loadModel(this.currentKeyboard.model);
+    this.group.add(this.keyboardMesh);
+
+    this.mouseMesh = await assetMgr.loadModel(this.currentMouse.model);
+    this.group.add(this.mouseMesh);
+
+    this.speakerMesh = await assetMgr.loadModel(this.currentSpeaker.model);
+    this.group.add(this.speakerMesh);
+
+    this.updateLayout();
   }
 
   public setSelected(selected: boolean) {
@@ -132,14 +285,14 @@ export class GamingStation {
     }
   }
 
-  // Upgrade methods (swaps model seamlessly in place)
+  // Upgrade methods (seamless model swap + full dynamic layout recalculation)
   public async upgradePC(newTier: PCUpgrade) {
     this.currentPC = newTier;
     if (this.pcMesh) this.group.remove(this.pcMesh);
     const assetMgr = AssetManager.getInstance();
     this.pcMesh = await assetMgr.loadModel(newTier.model);
-    this.pcMesh.position.set(0.48, 0.72, -0.05);
     this.group.add(this.pcMesh);
+    this.updateLayout();
   }
 
   public async upgradeChair(newTier: ChairUpgrade) {
@@ -147,8 +300,8 @@ export class GamingStation {
     if (this.chairMesh) this.group.remove(this.chairMesh);
     const assetMgr = AssetManager.getInstance();
     this.chairMesh = await assetMgr.loadModel(newTier.model);
-    this.chairMesh.position.set(0, 0, 0.55);
     this.group.add(this.chairMesh);
+    this.updateLayout();
   }
 
   public async upgradeMonitor(newTier: MonitorUpgrade) {
@@ -156,8 +309,8 @@ export class GamingStation {
     if (this.monitorMesh) this.group.remove(this.monitorMesh);
     const assetMgr = AssetManager.getInstance();
     this.monitorMesh = await assetMgr.loadModel(newTier.model);
-    this.monitorMesh.position.set(0, 0.72, -0.15);
     this.group.add(this.monitorMesh);
+    this.updateLayout();
   }
 
   public async upgradeDesk(newTier: DeskUpgrade) {
@@ -165,8 +318,8 @@ export class GamingStation {
     if (this.deskMesh) this.group.remove(this.deskMesh);
     const assetMgr = AssetManager.getInstance();
     this.deskMesh = await assetMgr.loadModel(newTier.model);
-    this.deskMesh.position.set(0, 0, 0);
     this.group.add(this.deskMesh);
+    this.updateLayout();
   }
 
   public async upgradeKeyboard(newTier: PeripheralUpgrade) {
@@ -174,8 +327,8 @@ export class GamingStation {
     if (this.keyboardMesh) this.group.remove(this.keyboardMesh);
     const assetMgr = AssetManager.getInstance();
     this.keyboardMesh = await assetMgr.loadModel(newTier.model);
-    this.keyboardMesh.position.set(-0.05, 0.72, 0.14);
     this.group.add(this.keyboardMesh);
+    this.updateLayout();
   }
 
   public async upgradeMouse(newTier: PeripheralUpgrade) {
@@ -183,8 +336,8 @@ export class GamingStation {
     if (this.mouseMesh) this.group.remove(this.mouseMesh);
     const assetMgr = AssetManager.getInstance();
     this.mouseMesh = await assetMgr.loadModel(newTier.model);
-    this.mouseMesh.position.set(0.25, 0.72, 0.14);
     this.group.add(this.mouseMesh);
+    this.updateLayout();
   }
 
   public async upgradeSpeaker(newTier: PeripheralUpgrade) {
@@ -192,8 +345,8 @@ export class GamingStation {
     if (this.speakerMesh) this.group.remove(this.speakerMesh);
     const assetMgr = AssetManager.getInstance();
     this.speakerMesh = await assetMgr.loadModel(newTier.model);
-    this.speakerMesh.position.set(-0.38, 0.72, -0.12);
     this.group.add(this.speakerMesh);
+    this.updateLayout();
   }
 
   public getHourlyRevenue(): number {
@@ -217,8 +370,10 @@ export class GamingStation {
   }
 
   public getSeatingWorldPosition(): THREE.Vector3 {
-    // World position where the customer sits (directly in the chair facing the desk)
-    const localSeat = new THREE.Vector3(0, 0, 0.55);
+    // World position where the customer sits (directly on chair cushion facing the desk)
+    const chairZ = this.computedChairZ;
+    const seatZ = chairZ;
+    const localSeat = new THREE.Vector3(0, 0, seatZ);
     localSeat.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(localSeat);
   }

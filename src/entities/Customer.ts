@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
 import { GamingStation } from './GamingStation.ts';
+import { CollisionSystem } from '../systems/CollisionSystem.ts';
+import { GridSystem } from '../systems/GridSystem.ts';
 
 export type CustomerState =
   | 'SPAWNING'
@@ -53,7 +55,14 @@ export class Customer {
   private gamingTimer: number = 0;
 
   private targetPosition: THREE.Vector3 = new THREE.Vector3();
+  private waypoints: THREE.Vector3[] = [];
+  private currentWaypointIndex: number = 0;
   private walkSpeed: number = 2.2; // meters per second
+  private stuckTimer: number = 0;
+  private lastPosition: THREE.Vector3 = new THREE.Vector3();
+
+  public collisionSystem?: CollisionSystem;
+  public gridSystem?: GridSystem;
 
   // Animation mixer and actions
   private mixer?: THREE.AnimationMixer;
@@ -141,8 +150,18 @@ export class Customer {
   }
 
   public moveTo(destination: THREE.Vector3, nextState?: CustomerState) {
-    this.targetPosition.copy(destination);
     if (nextState) this.state = nextState;
+
+    if (this.gridSystem) {
+      const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
+        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.28, this.assignedStation?.id) ?? false;
+      this.waypoints = this.gridSystem.findPath(this.group.position, destination, isBlocked);
+    } else {
+      this.waypoints = [destination.clone()];
+    }
+
+    this.currentWaypointIndex = 0;
+    this.targetPosition.copy(this.waypoints[0] || destination);
     this.playAction(this.walkAction);
   }
 
@@ -158,21 +177,55 @@ export class Customer {
       this.state === 'WALKING_TO_STATION' ||
       this.state === 'LEAVING'
     ) {
-      const dir = this.targetPosition.clone().sub(this.group.position);
-      dir.y = 0;
-      const distance = dir.length();
+      if (this.currentWaypointIndex < this.waypoints.length) {
+        const isFinal = this.currentWaypointIndex === this.waypoints.length - 1;
+        const currentTarget = this.waypoints[this.currentWaypointIndex];
+        const dir = currentTarget.clone().sub(this.group.position);
+        dir.y = 0;
+        const distance = dir.length();
+        const threshold = isFinal ? 0.25 : 0.40;
 
-      if (distance > 0.12) {
-        dir.normalize();
-        this.group.position.addScaledVector(dir, this.walkSpeed * deltaTime);
+        if (distance > threshold) {
+          dir.normalize();
+          this.group.position.addScaledVector(dir, this.walkSpeed * deltaTime);
 
-        // Smooth rotation to face movement direction
-        const targetAngle = Math.atan2(dir.x, dir.z);
-        this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, targetAngle, 0.25);
+          // Smooth rotation to face movement direction
+          const targetAngle = Math.atan2(dir.x, dir.z);
+          this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, targetAngle, 0.25);
+        } else {
+          this.currentWaypointIndex++;
+          this.stuckTimer = 0;
+          if (this.currentWaypointIndex >= this.waypoints.length) {
+            // Reached destination
+            this.group.position.copy(currentTarget);
+            this.onReachedTarget();
+          }
+        }
+      }
+
+      // Check for stuck / blocked movement against an obstacle
+      const moveDelta = this.group.position.distanceTo(this.lastPosition);
+      this.lastPosition.copy(this.group.position);
+
+      if (moveDelta < 0.05 * deltaTime * this.walkSpeed) {
+        this.stuckTimer += deltaTime;
+        // If forward motion is blocked against an obstacle for > 0.4s, advance waypoint or complete
+        if (this.stuckTimer > 0.4) {
+          this.stuckTimer = 0;
+          this.currentWaypointIndex++;
+          if (this.currentWaypointIndex >= this.waypoints.length) {
+            this.onReachedTarget();
+          }
+        }
       } else {
-        // Reached destination
-        this.group.position.copy(this.targetPosition);
-        this.onReachedTarget();
+        this.stuckTimer = 0;
+      }
+
+      // Rigid Solid Collision: guarantees character CANNOT walk inside or through solid items
+      if (this.collisionSystem) {
+        const ignoreStationId =
+          this.state === 'WALKING_TO_STATION' ? this.assignedStation?.id : undefined;
+        this.collisionSystem.resolveCollision(this.group.position, 0.28, ignoreStationId);
       }
     } else if (this.state === 'WAITING_CHECKIN') {
       if (this.waveAction && !this.currentAction) {
@@ -182,6 +235,11 @@ export class Customer {
       }
     } else if (this.state === 'GAMING') {
       this.gamingTimer += deltaTime;
+      if (this.assignedStation) {
+        // Keep customer aligned with dynamic chair position if station upgrades mid-session
+        const seatPos = this.assignedStation.getSeatingWorldPosition();
+        this.group.position.lerp(seatPos, 0.1);
+      }
       if (this.gamingTimer >= this.gamingDuration) {
         this.finishSession();
       }
@@ -203,12 +261,12 @@ export class Customer {
         this.assignedStation.isOccupied = true;
         this.assignedStation.currentGamerId = this.id;
 
-        // Position seated at the station facing the monitor
-        const seatPos = this.assignedStation.getSeatingWorldPosition();
-        this.group.position.copy(seatPos);
+        // Position at station facing the monitor
+        const stationPos = this.assignedStation.getSeatingWorldPosition();
+        this.group.position.copy(stationPos);
         this.group.rotation.y = this.assignedStation.group.rotation.y + Math.PI;
 
-        // Play interact (hands on keyboard and mouse gaming)
+        // Play interact (standing gaming with hands on keyboard & mouse)
         this.playAction(this.interactAction || this.idleAction);
       }
     } else if (this.state === 'LEAVING') {

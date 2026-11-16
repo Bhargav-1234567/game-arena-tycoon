@@ -4,11 +4,13 @@ import { PlacementSystem } from './PlacementSystem.ts';
 import { EconomySystem } from './EconomySystem.ts';
 import { AssetManager } from '../services/AssetManager.ts';
 import { SoundManager } from '../services/SoundManager.ts';
+import { CollisionSystem } from './CollisionSystem.ts';
 
 export class CustomerSystem {
   private scene: THREE.Scene;
   private placementSystem: PlacementSystem;
   private economySystem: EconomySystem;
+  private collisionSystem: CollisionSystem;
 
   private customers: Map<string, Customer> = new Map();
   private spawnTimer: number = 0;
@@ -27,9 +29,10 @@ export class CustomerSystem {
     this.scene = scene;
     this.placementSystem = placementSystem;
     this.economySystem = economySystem;
+    this.collisionSystem = new CollisionSystem(placementSystem);
   }
 
-  public async setupReceptionist(counterPos: THREE.Vector3) {
+  public async setupReceptionist(staffPos?: THREE.Vector3, deskRotationY: number = 0) {
     const assetMgr = AssetManager.getInstance();
 
     if (this.receptionistGroup) {
@@ -52,9 +55,18 @@ export class CustomerSystem {
     this.receptionistGroup.name = 'Receptionist_Employee';
     this.receptionistGroup.add(receptionistModel);
 
-    // Position behind the counter facing front (+Z)
-    this.receptionistGroup.position.set(counterPos.x, 0, counterPos.z - 0.95);
-    this.receptionistGroup.rotation.y = 0; // Face forward towards visitors
+    // Position behind the counter with clear spacing so employee never clips desk
+    if (this.placementSystem.receptionDesk) {
+      const pos = this.placementSystem.receptionDesk.getStaffPosition();
+      this.receptionistGroup.position.copy(pos);
+      this.receptionistGroup.rotation.y = this.placementSystem.receptionDesk.group.rotation.y;
+    } else if (staffPos) {
+      this.receptionistGroup.position.copy(staffPos);
+      this.receptionistGroup.rotation.y = deskRotationY;
+    } else {
+      this.receptionistGroup.position.set(0, 0, 2.65);
+      this.receptionistGroup.rotation.y = 0;
+    }
     this.scene.add(this.receptionistGroup);
 
     // Setup animations from Women animation suite
@@ -139,6 +151,8 @@ export class CustomerSystem {
 
     // Spawn near entrance
     const spawnPos = new THREE.Vector3(0, 0, 6.8);
+    customer.collisionSystem = this.collisionSystem;
+    customer.gridSystem = this.placementSystem.gridSystem;
     await customer.build(spawnPos);
 
     this.scene.add(customer.group);
@@ -169,8 +183,11 @@ export class CustomerSystem {
     };
 
     // First walk to reception (or directly to a station if reception not yet placed)
-    if (this.placementSystem.receptionPosition) {
-      const waitSpot = this.placementSystem.receptionPosition.clone().add(new THREE.Vector3(0, 0, 1.25));
+    if (this.placementSystem.receptionDesk) {
+      const waitSpot = this.placementSystem.receptionDesk.getCustomerQueuePosition();
+      customer.moveTo(waitSpot, 'WALKING_TO_RECEPTION');
+    } else if (this.placementSystem.receptionPosition) {
+      const waitSpot = this.placementSystem.receptionPosition.clone().add(new THREE.Vector3(0, 0, 1.45));
       customer.moveTo(waitSpot, 'WALKING_TO_RECEPTION');
     } else {
       customer.state = 'WAITING_CHECKIN';
