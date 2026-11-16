@@ -80,34 +80,34 @@ export class GamingStation {
     this.deskMesh.position.set(0, 0, 0);
     this.group.add(this.deskMesh);
 
-    // 2. Chair (placed at Z = -0.45 facing the desk)
+    // 2. Chair (placed at Z = 0.55 facing the desk at -Z)
     this.chairMesh = await assetMgr.loadModel(this.currentChair.model);
-    this.chairMesh.position.set(0, 0, -0.45);
+    this.chairMesh.position.set(0, 0, 0.55);
     this.group.add(this.chairMesh);
 
-    // 3. PC Tower (placed on the right side of desk surface at X = 0.42, Y = 0.72, Z = 0.05)
+    // 3. PC Tower (placed on the right side of desk surface at X = 0.48, Y = 0.72, Z = -0.05)
     this.pcMesh = await assetMgr.loadModel(this.currentPC.model);
-    this.pcMesh.position.set(0.42, 0.72, 0.05);
+    this.pcMesh.position.set(0.48, 0.72, -0.05);
     this.group.add(this.pcMesh);
 
-    // 4. Monitor (center of desk surface at X = 0, Y = 0.72, Z = 0.10)
+    // 4. Monitor (center of desk surface at X = 0, Y = 0.72, Z = -0.15)
     this.monitorMesh = await assetMgr.loadModel(this.currentMonitor.model);
-    this.monitorMesh.position.set(0, 0.72, 0.10);
+    this.monitorMesh.position.set(0, 0.72, -0.15);
     this.group.add(this.monitorMesh);
 
-    // 5. Keyboard (centered in front of monitor at X = -0.05, Y = 0.72, Z = -0.12)
+    // 5. Keyboard (centered in front of monitor at X = -0.05, Y = 0.72, Z = 0.14)
     this.keyboardMesh = await assetMgr.loadModel(this.currentKeyboard.model);
-    this.keyboardMesh.position.set(-0.05, 0.72, -0.12);
+    this.keyboardMesh.position.set(-0.05, 0.72, 0.14);
     this.group.add(this.keyboardMesh);
 
-    // 6. Mouse (right of keyboard at X = 0.30, Y = 0.72, Z = -0.12)
+    // 6. Mouse (right of keyboard at X = 0.25, Y = 0.72, Z = 0.14)
     this.mouseMesh = await assetMgr.loadModel(this.currentMouse.model);
-    this.mouseMesh.position.set(0.30, 0.72, -0.12);
+    this.mouseMesh.position.set(0.25, 0.72, 0.14);
     this.group.add(this.mouseMesh);
 
-    // 7. Speaker (left flank of monitor at X = -0.38, Y = 0.72, Z = 0.10)
+    // 7. Speaker (left flank of monitor at X = -0.38, Y = 0.72, Z = -0.12)
     this.speakerMesh = await assetMgr.loadModel(this.currentSpeaker.model);
-    this.speakerMesh.position.set(-0.38, 0.72, 0.10);
+    this.speakerMesh.position.set(-0.38, 0.72, -0.12);
     this.group.add(this.speakerMesh);
 
     // 8. Selection Highlight Ring
@@ -138,7 +138,7 @@ export class GamingStation {
     if (this.pcMesh) this.group.remove(this.pcMesh);
     const assetMgr = AssetManager.getInstance();
     this.pcMesh = await assetMgr.loadModel(newTier.model);
-    this.pcMesh.position.set(0.42, 0.72, 0.05);
+    this.pcMesh.position.set(0.48, 0.72, -0.05);
     this.group.add(this.pcMesh);
   }
 
@@ -147,7 +147,7 @@ export class GamingStation {
     if (this.chairMesh) this.group.remove(this.chairMesh);
     const assetMgr = AssetManager.getInstance();
     this.chairMesh = await assetMgr.loadModel(newTier.model);
-    this.chairMesh.position.set(0, 0, -0.45);
+    this.chairMesh.position.set(0, 0, 0.55);
     this.group.add(this.chairMesh);
   }
 
@@ -156,7 +156,7 @@ export class GamingStation {
     if (this.monitorMesh) this.group.remove(this.monitorMesh);
     const assetMgr = AssetManager.getInstance();
     this.monitorMesh = await assetMgr.loadModel(newTier.model);
-    this.monitorMesh.position.set(0, 0.72, 0.10);
+    this.monitorMesh.position.set(0, 0.72, -0.15);
     this.group.add(this.monitorMesh);
   }
 
@@ -174,7 +174,7 @@ export class GamingStation {
     if (this.keyboardMesh) this.group.remove(this.keyboardMesh);
     const assetMgr = AssetManager.getInstance();
     this.keyboardMesh = await assetMgr.loadModel(newTier.model);
-    this.keyboardMesh.position.set(-0.05, 0.72, -0.12);
+    this.keyboardMesh.position.set(-0.05, 0.72, 0.14);
     this.group.add(this.keyboardMesh);
   }
 
@@ -183,7 +183,7 @@ export class GamingStation {
     if (this.mouseMesh) this.group.remove(this.mouseMesh);
     const assetMgr = AssetManager.getInstance();
     this.mouseMesh = await assetMgr.loadModel(newTier.model);
-    this.mouseMesh.position.set(0.30, 0.72, -0.12);
+    this.mouseMesh.position.set(0.25, 0.72, 0.14);
     this.group.add(this.mouseMesh);
   }
 
@@ -192,7 +192,7 @@ export class GamingStation {
     if (this.speakerMesh) this.group.remove(this.speakerMesh);
     const assetMgr = AssetManager.getInstance();
     this.speakerMesh = await assetMgr.loadModel(newTier.model);
-    this.speakerMesh.position.set(-0.38, 0.72, 0.10);
+    this.speakerMesh.position.set(-0.38, 0.72, -0.12);
     this.group.add(this.speakerMesh);
   }
 
@@ -218,7 +218,7 @@ export class GamingStation {
 
   public getSeatingWorldPosition(): THREE.Vector3 {
     // World position where the customer sits (directly in the chair facing the desk)
-    const localSeat = new THREE.Vector3(0, 0, -0.45);
+    const localSeat = new THREE.Vector3(0, 0, 0.55);
     localSeat.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(localSeat);
   }

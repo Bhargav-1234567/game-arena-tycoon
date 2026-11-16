@@ -206,7 +206,7 @@ export class Customer {
         // Position seated at the station facing the monitor
         const seatPos = this.assignedStation.getSeatingWorldPosition();
         this.group.position.copy(seatPos);
-        this.group.rotation.y = this.assignedStation.group.rotation.y;
+        this.group.rotation.y = this.assignedStation.group.rotation.y + Math.PI;
 
         // Play interact (hands on keyboard and mouse gaming)
         this.playAction(this.interactAction || this.idleAction);
