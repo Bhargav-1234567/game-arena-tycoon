@@ -51,6 +51,8 @@ export class Customer {
   public isMale: boolean = true;
 
   public assignedStation?: GamingStation;
+  public targetDeskId?: string;
+  public targetDesk?: any;
   public gamingDuration: number = 20; // seconds
   private gamingTimer: number = 0;
 
@@ -63,6 +65,17 @@ export class Customer {
 
   public collisionSystem?: CollisionSystem;
   public gridSystem?: GridSystem;
+  public getOtherCustomerPositions?: () => THREE.Vector3[];
+
+  // 16 radial directions covering full 360° (+X, -X, +Z, -Z, and all diagonals)
+  private static readonly ALL_DIRECTIONS: { x: number; z: number }[] = (() => {
+    const dirs: { x: number; z: number }[] = [];
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      dirs.push({ x: Math.sin(angle), z: Math.cos(angle) });
+    }
+    return dirs;
+  })();
 
   // Animation mixer and actions
   private mixer?: THREE.AnimationMixer;
@@ -110,10 +123,14 @@ export class Customer {
     this.group.position.copy(spawnPos);
     this.targetPosition.copy(spawnPos);
 
-    // Load gender-relevant movement animations: Men for Men, Women for Women!
-    const animations = this.isMale
-      ? await assetMgr.loadMenAnimations()
-      : await assetMgr.loadWomenAnimations();
+    // Prioritize model's own native animations (which match its exact skeleton, joints, and proportions)
+    let animations = (model.userData.animations as THREE.AnimationClip[]) || [];
+    if (!animations || animations.length === 0) {
+      const fallbackClips = this.isMale
+        ? await assetMgr.loadMenAnimations()
+        : await assetMgr.loadWomenAnimations();
+      animations = fallbackClips.map((c) => assetMgr.sanitizeClip(c, false));
+    }
 
     if (animations && animations.length > 0) {
       this.mixer = new THREE.AnimationMixer(model);
@@ -149,19 +166,22 @@ export class Customer {
     this.currentAction = action;
   }
 
-  public moveTo(destination: THREE.Vector3, nextState?: CustomerState) {
+  public moveTo(destination: THREE.Vector3, nextState?: CustomerState, ignoreStationId?: string) {
     if (nextState) this.state = nextState;
+    this.targetPosition.copy(destination);
+
+    const stationId = ignoreStationId || this.assignedStation?.id;
 
     if (this.gridSystem) {
       const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
-        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.28, this.assignedStation?.id) ?? false;
+        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.55, stationId) ?? false;
       this.waypoints = this.gridSystem.findPath(this.group.position, destination, isBlocked);
     } else {
       this.waypoints = [destination.clone()];
     }
 
     this.currentWaypointIndex = 0;
-    this.targetPosition.copy(this.waypoints[0] || destination);
+    this.stuckTimer = 0;
     this.playAction(this.walkAction);
   }
 
@@ -177,21 +197,145 @@ export class Customer {
       this.state === 'WALKING_TO_STATION' ||
       this.state === 'LEAVING'
     ) {
+      // Early exit check for leaving customers reaching the doorway
+      if (this.state === 'LEAVING' && this.group.position.z >= 7.6) {
+        this.state = 'DESPAWNED';
+        if (this.onFinished) {
+          this.onFinished(this);
+        }
+        return;
+      }
+
+      const ignoreStationId =
+        this.state === 'WALKING_TO_STATION' ? this.assignedStation?.id : undefined;
+
       if (this.currentWaypointIndex < this.waypoints.length) {
         const isFinal = this.currentWaypointIndex === this.waypoints.length - 1;
         const currentTarget = this.waypoints[this.currentWaypointIndex];
         const dir = currentTarget.clone().sub(this.group.position);
         dir.y = 0;
         const distance = dir.length();
-        const threshold = isFinal ? 0.25 : 0.40;
+        const threshold = isFinal ? 0.20 : 0.40;
 
         if (distance > threshold) {
           dir.normalize();
-          this.group.position.addScaledVector(dir, this.walkSpeed * deltaTime);
+          const step = this.walkSpeed * deltaTime;
+          const pos = this.group.position;
+          const lookahead = Math.max(step * 3, 0.28);
+
+          // 1. Check if direct path ahead has a static obstacle collision
+          const directTestX = pos.x + dir.x * lookahead;
+          const directTestZ = pos.z + dir.z * lookahead;
+          const isDirectBlocked = this.collisionSystem?.isPointBlocked(
+            directTestX,
+            directTestZ,
+            0.26,
+            ignoreStationId
+          );
+
+          let chosenDir: { x: number; z: number } = { x: dir.x, z: dir.z };
+
+          if (isDirectBlocked) {
+            // Direct path is blocked by a solid obstacle!
+            // Check all 16 directions (+X, -X, +Z, -Z, and all diagonals)
+            // to find the closest open path towards the target!
+            let bestScore = -Infinity;
+            let bestDir: { x: number; z: number } | null = null;
+
+            for (const d of Customer.ALL_DIRECTIONS) {
+              const testX = pos.x + d.x * lookahead;
+              const testZ = pos.z + d.z * lookahead;
+
+              // Check if direction is clear of static obstacles
+              if (this.collisionSystem?.isPointBlocked(testX, testZ, 0.24, ignoreStationId)) {
+                continue;
+              }
+
+              // Direction is open!
+              // Score based on alignment with destination and minimizing remaining distance
+              const dot = d.x * dir.x + d.z * dir.z;
+              const distSq = (testX - currentTarget.x) ** 2 + (testZ - currentTarget.z) ** 2;
+              const score = dot * 2.0 - Math.sqrt(distSq);
+
+              if (score > bestScore) {
+                bestScore = score;
+                bestDir = d;
+              }
+            }
+
+            if (bestDir) {
+              chosenDir = bestDir;
+            } else {
+              // Corner fallback: test orthogonal directions with tighter margin (+X, -X, +Z, -Z)
+              const fallbacks = [
+                { x: 1, z: 0 },
+                { x: -1, z: 0 },
+                { x: 0, z: 1 },
+                { x: 0, z: -1 },
+                { x: 0.707, z: 0.707 },
+                { x: -0.707, z: 0.707 },
+                { x: 0.707, z: -0.707 },
+                { x: -0.707, z: -0.707 }
+              ];
+              for (const fb of fallbacks) {
+                if (
+                  !this.collisionSystem?.isPointBlocked(
+                    pos.x + fb.x * 0.15,
+                    pos.z + fb.z * 0.15,
+                    0.18,
+                    ignoreStationId
+                  )
+                ) {
+                  chosenDir = fb;
+                  break;
+                }
+              }
+            }
+          }
+
+          // 2. Dynamic Pedestrian Steering: steer smoothly around other customers
+          const otherPositions = this.getOtherCustomerPositions
+            ? this.getOtherCustomerPositions()
+            : [];
+          let steerX = chosenDir.x;
+          let steerZ = chosenDir.z;
+
+          for (let i = 0; i < otherPositions.length; i++) {
+            const op = otherPositions[i];
+            const dx = pos.x - op.x;
+            const dz = pos.z - op.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < 0.65 && dist > 0.001) {
+              const repulse = (0.65 - dist) / 0.65;
+              // Repulsion away from other customer
+              steerX += (dx / dist) * repulse * 0.85;
+              steerZ += (dz / dist) * repulse * 0.85;
+
+              // Lateral slip (steer to right so characters slide past each other smoothly)
+              const lateralX = -dz / dist;
+              const lateralZ = dx / dist;
+              steerX += lateralX * repulse * 0.55;
+              steerZ += lateralZ * repulse * 0.55;
+            }
+          }
+
+          const steerLen = Math.hypot(steerX, steerZ);
+          if (steerLen > 0.001) {
+            steerX /= steerLen;
+            steerZ /= steerLen;
+          }
+
+          // Apply movement step
+          pos.x += steerX * step;
+          pos.z += steerZ * step;
 
           // Smooth rotation to face movement direction
-          const targetAngle = Math.atan2(dir.x, dir.z);
-          this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, targetAngle, 0.25);
+          const targetAngle = Math.atan2(steerX, steerZ);
+          let diff = targetAngle - this.group.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          this.group.rotation.y += diff * Math.min(1.0, 12 * deltaTime);
         } else {
           this.currentWaypointIndex++;
           this.stuckTimer = 0;
@@ -209,12 +353,25 @@ export class Customer {
 
       if (moveDelta < 0.05 * deltaTime * this.walkSpeed) {
         this.stuckTimer += deltaTime;
-        // If forward motion is blocked against an obstacle for > 0.4s, advance waypoint or complete
         if (this.stuckTimer > 0.4) {
           this.stuckTimer = 0;
-          this.currentWaypointIndex++;
-          if (this.currentWaypointIndex >= this.waypoints.length) {
+          const distToFinal = this.group.position.distanceTo(this.targetPosition);
+          if (distToFinal <= 0.50) {
+            // Truly at destination
+            this.group.position.copy(this.targetPosition);
             this.onReachedTarget();
+          } else if (this.currentWaypointIndex < this.waypoints.length - 1) {
+            // Advance to next waypoint to smoothly slip past any minor obstacle contact
+            this.currentWaypointIndex++;
+          } else if (this.gridSystem) {
+            // Recompute path around current blockage with 0.40m clearance
+            const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
+              this.collisionSystem?.isSegmentBlocked(p1, p2, 0.40, this.assignedStation?.id) ?? false;
+            const newPath = this.gridSystem.findPath(this.group.position, this.targetPosition, isBlocked);
+            if (newPath && newPath.length > 0) {
+              this.waypoints = newPath;
+              this.currentWaypointIndex = 0;
+            }
           }
         }
       } else {
@@ -223,8 +380,6 @@ export class Customer {
 
       // Rigid Solid Collision: guarantees character CANNOT walk inside or through solid items
       if (this.collisionSystem) {
-        const ignoreStationId =
-          this.state === 'WALKING_TO_STATION' ? this.assignedStation?.id : undefined;
         this.collisionSystem.resolveCollision(this.group.position, 0.28, ignoreStationId);
       }
     } else if (this.state === 'WAITING_CHECKIN') {
@@ -249,7 +404,13 @@ export class Customer {
   private onReachedTarget() {
     if (this.state === 'WALKING_TO_RECEPTION') {
       this.state = 'WAITING_CHECKIN';
-      // Greet the receptionist with a wave or idle
+      // Dynamically face the reception desk
+      if (this.targetDesk) {
+        const dir = new THREE.Vector3().subVectors(this.targetDesk.group.position, this.group.position);
+        this.group.rotation.y = Math.atan2(dir.x, dir.z);
+      } else {
+        this.group.rotation.y = Math.PI;
+      }
       this.playAction(this.waveAction || this.idleAction);
       if (this.onCheckIn) {
         this.onCheckIn(this);
@@ -278,7 +439,9 @@ export class Customer {
   }
 
   public finishSession() {
+    let oldStationId: string | undefined;
     if (this.assignedStation) {
+      oldStationId = this.assignedStation.id;
       const rev = Math.round(
         this.assignedStation.getHourlyRevenue() * (this.gamingDuration / 10)
       );
@@ -291,7 +454,7 @@ export class Customer {
       this.assignedStation = undefined;
     }
 
-    // Walk towards lounge exit
-    this.moveTo(new THREE.Vector3(0, 0, 7.5), 'LEAVING');
+    // Walk towards lounge exit (doorway at Z = 7.8)
+    this.moveTo(new THREE.Vector3(0, 0, 7.8), 'LEAVING', oldStationId);
   }
 }

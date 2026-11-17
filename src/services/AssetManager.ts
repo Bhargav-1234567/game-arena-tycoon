@@ -50,6 +50,37 @@ export class AssetManager {
     return this.loadWomenAnimations();
   }
 
+  /**
+   * Sanitizes animation clips for clean playback and retargeting across character models.
+   * If isNative is true, retains all native keyframes.
+   * If isNative is false (retargeted fallback), filters out limb .position and .scale tracks
+   * to guarantee bones (especially feet and legs) never stretch, dislocate, or twist.
+   */
+  public sanitizeClip(clip: THREE.AnimationClip, isNative: boolean = true): THREE.AnimationClip {
+    if (isNative) return clip;
+    const safeTracks = clip.tracks.filter((t) => {
+      if (t.name.endsWith('.quaternion')) return true;
+      if (t.name.endsWith('.position')) {
+        const bone = t.name.split('.')[0].toLowerCase();
+        return bone === 'root' || bone === 'body' || bone === 'hips';
+      }
+      return false;
+    });
+    return new THREE.AnimationClip(clip.name, clip.duration, safeTracks);
+  }
+
+  public getModelAnimations(model: THREE.Group, fallbackUrl?: string): THREE.AnimationClip[] {
+    const native = (model.userData.animations as THREE.AnimationClip[]) || [];
+    if (native && native.length > 0) {
+      return native.map((c) => this.sanitizeClip(c, true));
+    }
+    if (fallbackUrl && this.animationsCache.has(fallbackUrl)) {
+      const fallback = this.animationsCache.get(fallbackUrl)!;
+      return fallback.map((c) => this.sanitizeClip(c, false));
+    }
+    return [];
+  }
+
   public async loadModel(url: string): Promise<THREE.Group> {
     if (this.cache.has(url)) {
       return this.cloneModel(this.cache.get(url)!);

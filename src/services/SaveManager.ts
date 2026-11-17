@@ -39,6 +39,7 @@ export interface GameSaveState {
   stations: SavedStationData[];
   facilities: SavedFacilityData[];
   staff: SavedStaffRoleData[];
+  expansionCount?: number;
 }
 
 const SAVE_KEY = 'gaming_zone_tycoon_save_v1';

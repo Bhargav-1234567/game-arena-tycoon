@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { AssetManager } from '../services/AssetManager.ts';
 
 export interface GridCell {
   x: number; // grid coordinate
@@ -9,6 +8,7 @@ export interface GridCell {
   occupied: boolean;
   occupantId?: string;
   isWalkable: boolean;
+  isUnlocked: boolean;
   roomType: 'lobby' | 'gaming' | 'vip' | 'none';
 }
 
@@ -20,7 +20,7 @@ export class GridSystem {
   public gridGroup: THREE.Group = new THREE.Group();
   public floorGroup: THREE.Group = new THREE.Group();
 
-  constructor(width: number = 16, depth: number = 16) {
+  constructor(width: number = 24, depth: number = 24) {
     this.width = width;
     this.depth = depth;
     this.initGrid();
@@ -42,7 +42,8 @@ export class GridSystem {
           worldX: x * this.cellSize + this.cellSize / 2,
           worldZ: z * this.cellSize + this.cellSize / 2,
           occupied: false,
-          isWalkable: true,
+          isWalkable: false,
+          isUnlocked: false,
           roomType: 'gaming'
         };
         this.cells.set(this.getKey(x, z), cell);
@@ -53,31 +54,51 @@ export class GridSystem {
   public async buildFloor(scene: THREE.Scene) {
     scene.add(this.floorGroup);
     scene.add(this.gridGroup);
+  }
 
-    // Create a subtle stylish grid helper plane for tycoon feel
-    const gridHelper = new THREE.GridHelper(
-      Math.max(this.width, this.depth),
-      Math.max(this.width, this.depth),
-      0x0d9488,
-      0x27364b
-    );
-    gridHelper.position.y = 0.002;
-    this.gridGroup.add(gridHelper);
-
-    // Load Floor Tile model once and instance/clone across the floor
-    const assetMgr = AssetManager.getInstance();
-    const floorModel = await assetMgr.loadModel('/assets/models/environment/floors/floor_tile.glb');
-
-    const halfW = Math.floor(this.width / 2);
-    const halfD = Math.floor(this.depth / 2);
-
-    for (let x = -halfW; x < halfW; x++) {
-      for (let z = -halfD; z < halfD; z++) {
-        const tile = floorModel.clone();
-        tile.position.set(x + 0.5, 0, z + 0.5);
-        this.floorGroup.add(tile);
-      }
+  public async rebuildFloor(minX: number, maxX: number, minZ: number, maxZ: number) {
+    // Clear existing floor and grid
+    while (this.floorGroup.children.length > 0) {
+      const child = this.floorGroup.children[0];
+      this.floorGroup.remove(child);
     }
+    while (this.gridGroup.children.length > 0) {
+      const child = this.gridGroup.children[0];
+      this.gridGroup.remove(child);
+    }
+
+    const width = maxX - minX;
+    const depth = maxZ - minZ;
+    const centerX = (minX + maxX) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+
+    // 1. Continuous, seamless bright white floor plane covering the entire room bounds
+    const floorGeo = new THREE.PlaneGeometry(width, depth);
+    floorGeo.rotateX(-Math.PI / 2);
+    floorGeo.computeBoundingBox();
+    floorGeo.computeBoundingSphere();
+
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,       // Pure bright clean white
+      roughness: 0.18,       // Sleek polished gaming lounge sheen
+      metalness: 0.04
+    });
+
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.position.set(centerX, 0.0, centerZ);
+    floorMesh.receiveShadow = true;
+    floorMesh.name = 'ContinuousWhiteFloor';
+    this.floorGroup.add(floorMesh);
+
+    // Foundation slab base beneath floor
+    const baseGeo = new THREE.BoxGeometry(width + 0.1, 0.15, depth + 0.1);
+    const baseMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.set(centerX, -0.08, centerZ);
+    this.floorGroup.add(baseMesh);
+
+    // Grid group kept hidden during normal play to keep floor seamless and continuous
+    this.gridGroup.visible = false;
   }
 
   public getCell(x: number, z: number): GridCell | undefined {
@@ -102,7 +123,7 @@ export class GridSystem {
     for (let x = 0; x < width; x++) {
       for (let z = 0; z < depth; z++) {
         const cell = this.getCell(gridX + x, gridZ + z);
-        if (!cell || cell.occupied) {
+        if (!cell || !cell.isUnlocked || cell.occupied) {
           return false;
         }
       }
@@ -123,17 +144,34 @@ export class GridSystem {
         const cell = this.getCell(gridX + x, gridZ + z);
         if (cell) {
           cell.occupied = occupied;
-          cell.isWalkable = !occupied;
+          cell.isWalkable = cell.isUnlocked && !occupied;
           cell.occupantId = occupied ? occupantId : undefined;
         }
       }
     }
   }
 
+  public setZoneUnlocked(minX: number, maxX: number, minZ: number, maxZ: number, unlocked: boolean = true) {
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        const cell = this.getCell(x, z);
+        if (cell) {
+          cell.isUnlocked = unlocked;
+          cell.isWalkable = unlocked && !cell.occupied;
+        }
+      }
+    }
+  }
+
+  public isCellUnlocked(gridX: number, gridZ: number): boolean {
+    const cell = this.getCell(gridX, gridZ);
+    return !!cell && cell.isUnlocked;
+  }
+
   public getRandomWalkableCell(): GridCell | null {
     const walkable: GridCell[] = [];
     this.cells.forEach((c) => {
-      if (c.isWalkable && !c.occupied) walkable.push(c);
+      if (c.isUnlocked && c.isWalkable && !c.occupied) walkable.push(c);
     });
     if (walkable.length === 0) return null;
     return walkable[Math.floor(Math.random() * walkable.length)];
@@ -163,7 +201,9 @@ export class GridSystem {
           if (nc && nc.isWalkable) {
             const wPos = this.gridToWorld(nx, nz);
             const dist = Math.hypot(wPos.x - startWorld.x, wPos.z - startWorld.z);
-            startCandidates.push({ x: nx, z: nz, dist });
+            const dot = (nx - startGrid.x) * (targetGrid.x - startGrid.x) + (nz - startGrid.z) * (targetGrid.z - startGrid.z);
+            const score = dist - (dot > 0 ? 0.40 : 0);
+            startCandidates.push({ x: nx, z: nz, dist: score });
           }
         }
       }

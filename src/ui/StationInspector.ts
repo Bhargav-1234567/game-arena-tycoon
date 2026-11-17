@@ -19,9 +19,18 @@ export class StationInspector {
   private currentStation: GamingStation | null = null;
   private currentReception: ReceptionDesk | null = null;
   private currentFacility: FacilityEntity | null = null;
+  private currentObject: THREE.Object3D | null = null;
+  public get inspectingObject(): THREE.Object3D | null {
+    return this.currentObject;
+  }
   private economySystem: EconomySystem;
   private particleSystem?: ParticleSystem;
   private isUpgrading: boolean = false;
+
+  public onMoveRequested?: (target: {
+    type: 'station' | 'reception' | 'facility' | 'object';
+    entity: any;
+  }) => void;
 
   constructor(parent: HTMLElement, economySystem: EconomySystem, particleSystem?: ParticleSystem) {
     this.economySystem = economySystem;
@@ -50,6 +59,7 @@ export class StationInspector {
   public inspectStation(station: GamingStation | null) {
     this.currentReception = null;
     this.currentFacility = null;
+    this.currentObject = null;
     this.currentStation = station;
     if (!station) {
       this.element.style.display = 'none';
@@ -63,6 +73,7 @@ export class StationInspector {
   public inspectReception(reception: ReceptionDesk | null) {
     this.currentStation = null;
     this.currentFacility = null;
+    this.currentObject = null;
     this.currentReception = reception;
     if (!reception) {
       this.element.style.display = 'none';
@@ -76,6 +87,7 @@ export class StationInspector {
   public inspectFacility(facility: FacilityEntity | null) {
     this.currentStation = null;
     this.currentReception = null;
+    this.currentObject = null;
     this.currentFacility = facility;
     if (!facility) {
       this.element.style.display = 'none';
@@ -84,6 +96,28 @@ export class StationInspector {
 
     this.element.style.display = 'block';
     this.renderFacility();
+  }
+
+  public inspectObject(obj: THREE.Object3D | null) {
+    this.currentStation = null;
+    this.currentReception = null;
+    this.currentFacility = null;
+    this.currentObject = obj;
+    if (!obj) {
+      this.element.style.display = 'none';
+      return;
+    }
+
+    this.element.style.display = 'block';
+    this.renderGenericItem(obj);
+  }
+
+  public closeAll() {
+    this.currentStation = null;
+    this.currentReception = null;
+    this.currentFacility = null;
+    this.currentObject = null;
+    this.element.style.display = 'none';
   }
 
   private celebrateUpgrade(pos: THREE.Vector3, colorHex: number = 0x0d9488) {
@@ -104,7 +138,12 @@ export class StationInspector {
           <span class="inspector-badge" style="background: #0284c7;">RECEPTION</span>
           <h3>LEVEL ${r.currentTier.level}/4</h3>
         </div>
-        <button id="close-inspector-btn" class="close-btn">✕</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="move-item-btn" class="move-item-btn" title="Reposition this reception counter (M)">
+            <span>📦 Move (M)</span>
+          </button>
+          <button id="close-inspector-btn" class="close-btn">✕</button>
+        </div>
       </div>
 
       <div class="inspector-status-card" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8;">
@@ -149,6 +188,12 @@ export class StationInspector {
 
     this.element.querySelector('#close-inspector-btn')?.addEventListener('click', () => {
       this.inspectReception(null);
+    });
+
+    this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
+      if (this.onMoveRequested) {
+        this.onMoveRequested({ type: 'reception', entity: r });
+      }
     });
 
     if (nextTier) {
@@ -206,7 +251,12 @@ export class StationInspector {
           <span class="inspector-badge" style="background: ${typeConfig.badgeBg};">${typeConfig.badgeText}</span>
           <h3>LEVEL ${f.currentTier.level}/4</h3>
         </div>
-        <button id="close-inspector-btn" class="close-btn">✕</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="move-item-btn" class="move-item-btn" title="Reposition this facility (M)">
+            <span>📦 Move (M)</span>
+          </button>
+          <button id="close-inspector-btn" class="close-btn">✕</button>
+        </div>
       </div>
 
       <div class="inspector-status-card" style="background: rgba(15, 23, 42, 0.7); color: #f8fafc; border: 1px solid var(--border-color);">
@@ -253,6 +303,12 @@ export class StationInspector {
       this.inspectFacility(null);
     });
 
+    this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
+      if (this.onMoveRequested) {
+        this.onMoveRequested({ type: 'facility', entity: f });
+      }
+    });
+
     if (nextTier) {
       this.element.querySelector('#upgrade-facility-btn')?.addEventListener('click', async () => {
         if (!this.economySystem.canAfford(nextTier.price)) return;
@@ -290,7 +346,12 @@ export class StationInspector {
           <span class="inspector-badge">STATION</span>
           <h3>#${s.id.slice(-4).toUpperCase()}</h3>
         </div>
-        <button id="close-inspector-btn" class="close-btn">✕</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="move-item-btn" class="move-item-btn" title="Reposition this gaming station (M)">
+            <span>📦 Move (M)</span>
+          </button>
+          <button id="close-inspector-btn" class="close-btn">✕</button>
+        </div>
       </div>
 
       <div class="inspector-status-card ${s.isOccupied ? 'occupied' : 'idle'}">
@@ -424,6 +485,12 @@ export class StationInspector {
       this.inspectStation(null);
     });
 
+    this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
+      if (this.onMoveRequested) {
+        this.onMoveRequested({ type: 'station', entity: s });
+      }
+    });
+
     if (nextPC) {
       this.element.querySelector('#upgrade-pc-btn')?.addEventListener('click', async () => {
         if (this.economySystem.spend(nextPC.price)) {
@@ -493,5 +560,45 @@ export class StationInspector {
         }
       });
     }
+  }
+
+  private renderGenericItem(obj: THREE.Object3D) {
+    const item = obj.userData?.item;
+    const name = item?.name || obj.name || 'Placed Item';
+    const category = item?.category ? item.category.toUpperCase() : 'ITEM';
+
+    this.element.innerHTML = `
+      <div class="inspector-header">
+        <div class="inspector-title">
+          <span class="inspector-badge" style="background: #475569;">${category}</span>
+          <h3 style="font-size: 15px;">${name}</h3>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="move-item-btn" class="move-item-btn" title="Reposition this item (M)">
+            <span>📦 Move (M)</span>
+          </button>
+          <button id="close-inspector-btn" class="close-btn">✕</button>
+        </div>
+      </div>
+
+      <div class="inspector-status-card" style="background: rgba(15, 23, 42, 0.7); color: #f8fafc; border: 1px solid var(--border-color);">
+        <span class="status-dot" style="background: #38bdf8;"></span>
+        <span class="status-text">${item?.description || 'Placed in your gaming lounge.'}</span>
+      </div>
+
+      <div class="prop-info-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; margin-top: 14px;">
+        <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">Press <b>M</b> or click <b>📦 Move</b> to pick up this item, rotate with <b>R</b>, and place it in any open floor spot.</p>
+      </div>
+    `;
+
+    this.element.querySelector('#close-inspector-btn')?.addEventListener('click', () => {
+      this.inspectObject(null);
+    });
+
+    this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
+      if (this.onMoveRequested) {
+        this.onMoveRequested({ type: 'object', entity: obj });
+      }
+    });
   }
 }

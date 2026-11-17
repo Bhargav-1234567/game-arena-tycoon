@@ -80,10 +80,17 @@ export class ReceptionDesk {
     if (tier) this.currentTier = tier;
   }
 
+  private alignMesh(mesh: THREE.Group) {
+    // Untilt raw model (eliminates Blender ~14.6° yaw and ~3° pitch/roll tilts)
+    // and align customer counter ledge to +Z, employee drawers to -Z, sitting flush on floor (Y=0)
+    mesh.rotation.set(-0.058378, -2.886298, 0.025500, 'YXZ');
+    mesh.position.set(-0.0383, -0.0664, -0.0787);
+  }
+
   public async build() {
     const assetMgr = AssetManager.getInstance();
     this.mesh = await assetMgr.loadModel(this.currentTier.model);
-    this.mesh.position.set(0, 0, 0);
+    this.alignMesh(this.mesh);
     this.group.add(this.mesh);
 
     // Selection highlight ring around reception table
@@ -115,20 +122,21 @@ export class ReceptionDesk {
     }
     const assetMgr = AssetManager.getInstance();
     this.mesh = await assetMgr.loadModel(nextTier.model);
-    this.mesh.position.set(0, 0, 0);
+    this.alignMesh(this.mesh);
     this.group.add(this.mesh);
   }
 
   public getStaffPosition(): THREE.Vector3 {
     // Receptionist position behind desk (clear of counter edge so employee never clips table)
-    const local = new THREE.Vector3(0, 0, -1.35);
+    const local = new THREE.Vector3(0, 0, -1.30);
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(local);
   }
 
-  public getCustomerQueuePosition(): THREE.Vector3 {
-    // Customer waiting spot in front of desk (in open walkable floor aisle)
-    const local = new THREE.Vector3(0, 0, 1.85);
+  public getCustomerQueuePosition(queueIndex: number = 0): THREE.Vector3 {
+    // Customer waiting spot in front of desk counter.
+    // Index 0 is served at counter front (1.85m), index 1, 2, ... queue behind (0.85m apart).
+    const local = new THREE.Vector3(0, 0, 1.85 + queueIndex * 0.85);
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(local);
   }

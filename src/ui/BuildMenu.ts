@@ -8,6 +8,8 @@ export class BuildMenu {
   private economySystem: EconomySystem;
   private activeCategory: string = 'all';
 
+  public onExpandClick?: () => void;
+
   constructor(parent: HTMLElement, placementSystem: PlacementSystem, economySystem: EconomySystem) {
     this.placementSystem = placementSystem;
     this.economySystem = economySystem;
@@ -26,6 +28,9 @@ export class BuildMenu {
         <button id="btn-toggle-build" class="primary-action-btn">
           <span>🛠️ Build Mode</span>
         </button>
+        <button id="btn-expand-room" class="secondary-btn" style="background: linear-gradient(135deg, #059669, #10b981); border: 1px solid #34d399; color: #ffffff; font-weight: 700; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.40); cursor: pointer;">
+          <span id="expand-btn-text">⤢ Expand Room ($500)</span>
+        </button>
         <button id="btn-rotate-build" class="secondary-btn" style="display: none;">
           <span>🔄 Rotate (R)</span>
         </button>
@@ -39,6 +44,7 @@ export class BuildMenu {
           <button class="tab-btn active" data-cat="all">All</button>
           <button class="tab-btn" data-cat="station">Stations</button>
           <button class="tab-btn" data-cat="facility">Facilities</button>
+          <button class="tab-btn" data-cat="building">Building</button>
           <button class="tab-btn" data-cat="decor">Decor</button>
         </div>
         <div id="build-items-grid" class="build-items-grid"></div>
@@ -84,21 +90,36 @@ export class BuildMenu {
     this.showBuildControls(true);
   }
 
+  public updateExpandButton(nextPrice: number) {
+    const expandBtn = this.element.querySelector('#btn-expand-room') as HTMLElement;
+    const expandText = this.element.querySelector('#expand-btn-text');
+    if (!expandBtn || !expandText) return;
+    if (nextPrice > 0) {
+      expandBtn.style.display = 'inline-flex';
+      expandText.textContent = `⤢ Expand Room ($${nextPrice.toLocaleString()})`;
+    } else {
+      expandBtn.style.display = 'none';
+    }
+  }
+
   public showBuildControls(inBuildMode: boolean) {
     const rotateBtn = this.element.querySelector('#btn-rotate-build') as HTMLElement;
     const cancelBtn = this.element.querySelector('#btn-cancel-build') as HTMLElement;
     const toggleBtn = this.element.querySelector('#btn-toggle-build') as HTMLElement;
+    const expandBtn = this.element.querySelector('#btn-expand-room') as HTMLElement;
     const panel = this.element.querySelector('#build-panel') as HTMLElement;
 
     if (inBuildMode) {
       rotateBtn.style.display = 'inline-flex';
       cancelBtn.style.display = 'inline-flex';
       toggleBtn.style.display = 'none';
+      if (expandBtn) expandBtn.style.display = 'none';
       panel.style.display = 'none';
     } else {
       rotateBtn.style.display = 'none';
       cancelBtn.style.display = 'none';
       toggleBtn.style.display = 'inline-flex';
+      if (expandBtn) expandBtn.style.display = 'inline-flex';
     }
   }
 
@@ -107,6 +128,11 @@ export class BuildMenu {
     const panel = this.element.querySelector('#build-panel') as HTMLElement;
     const rotateBtn = this.element.querySelector('#btn-rotate-build')!;
     const cancelBtn = this.element.querySelector('#btn-cancel-build')!;
+    const expandBtn = this.element.querySelector('#btn-expand-room');
+
+    expandBtn?.addEventListener('click', () => {
+      if (this.onExpandClick) this.onExpandClick();
+    });
 
     toggleBtn.addEventListener('click', () => {
       const isVisible = panel.style.display !== 'none';
@@ -134,10 +160,12 @@ export class BuildMenu {
       });
     });
 
-    // Keyboard shortcut R for rotate, Esc for cancel
+    // Keyboard shortcut: R to rotate, M to move selected item, Esc to cancel
     window.addEventListener('keydown', (e) => {
       if (e.key === 'r' || e.key === 'R') {
         this.placementSystem.rotate();
+      } else if (e.key === 'm' || e.key === 'M') {
+        this.placementSystem.moveSelectedItem();
       } else if (e.key === 'Escape') {
         this.placementSystem.setBuildItem(undefined);
         this.showBuildControls(false);
