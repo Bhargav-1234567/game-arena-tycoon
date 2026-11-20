@@ -14,29 +14,17 @@ export type CustomerState =
   | 'DESPAWNED';
 
 export const MEN_CHARACTER_MODELS = [
-  '/assets/models/characters/men/Casual Character.glb',
-  '/assets/models/characters/men/Hoodie Character.glb',
-  '/assets/models/characters/men/Punk.glb',
-  '/assets/models/characters/men/Beach Character.glb',
-  '/assets/models/characters/men/Adventurer.glb',
-  '/assets/models/characters/men/Business Man.glb',
-  '/assets/models/characters/men/Astronaut.glb',
-  '/assets/models/characters/men/Farmer.glb',
-  '/assets/models/characters/men/King.glb',
-  '/assets/models/characters/men/Swat.glb',
-  '/assets/models/characters/men/Worker.glb'
+  '/assets/models/characters/men/Man.glb',
+  '/assets/models/characters/men/Man in Long Sleeves.glb',
+  '/assets/models/characters/men/Man in Suit.glb',
+  '/assets/models/characters/men/Man-fjHyMd5Wxw.glb'
 ];
 
 export const WOMEN_CHARACTER_MODELS = [
-  '/assets/models/characters/women/Animated Woman.glb',
-  '/assets/models/characters/women/Suit.glb',
-  '/assets/models/characters/women/Punk.glb',
-  '/assets/models/characters/women/Adventurer.glb',
-  '/assets/models/characters/women/Medieval.glb',
-  '/assets/models/characters/women/Sci Fi Character.glb',
-  '/assets/models/characters/women/Soldier.glb',
-  '/assets/models/characters/women/Witch.glb',
-  '/assets/models/characters/women/Worker.glb'
+  '/assets/models/characters/women/Woman.glb',
+  '/assets/models/characters/women/Woman Casual.glb',
+  '/assets/models/characters/women/Woman in Dress.glb',
+  '/assets/models/characters/women/Woman in Tank Top.glb'
 ];
 
 export const CUSTOMER_CHARACTER_MODELS = [
@@ -62,6 +50,7 @@ export class Customer {
   private walkSpeed: number = 2.2; // meters per second
   private stuckTimer: number = 0;
   private lastPosition: THREE.Vector3 = new THREE.Vector3();
+  private currentIgnoreStationId?: string;
 
   public collisionSystem?: CollisionSystem;
   public gridSystem?: GridSystem;
@@ -81,6 +70,8 @@ export class Customer {
   private mixer?: THREE.AnimationMixer;
   private walkAction?: THREE.AnimationAction;
   private idleAction?: THREE.AnimationAction;
+  private sitAction?: THREE.AnimationAction;
+  private clapAction?: THREE.AnimationAction;
   private interactAction?: THREE.AnimationAction;
   private waveAction?: THREE.AnimationAction;
   private currentAction?: THREE.AnimationAction;
@@ -108,8 +99,8 @@ export class Customer {
     this.isMale = modelUrl.includes('/men/');
 
     const model = await assetMgr.loadModel(modelUrl);
-    // Models are modeled in standard human proportions (~1.8m tall)
-    model.scale.setScalar(1.0);
+    // Scale new human models to 0.30 to naturally fit gaming chairs, desks, armrests and environment
+    model.scale.setScalar(0.30);
 
     // Ensure all submeshes have shadows and avoid frustum culling disappearance
     model.traverse((child) => {
@@ -142,14 +133,20 @@ export class Customer {
             a.name.toLowerCase().includes('idle') &&
             !a.name.toLowerCase().includes('gun') &&
             !a.name.toLowerCase().includes('sword')
-        ) || animations[0];
-      const interactClip = animations.find((a) => a.name.toLowerCase().includes('interact'));
-      const waveClip = animations.find((a) => a.name.toLowerCase().includes('wave'));
+        ) ||
+        animations.find((a) => a.name.toLowerCase().includes('standing')) ||
+        animations[0];
+      const sitClip = animations.find((a) => a.name.toLowerCase().includes('sit'));
+      const clapClip = animations.find((a) => a.name.toLowerCase().includes('clap'));
+      const waveClip = animations.find((a) => a.name.toLowerCase().includes('wave')) || clapClip;
+      const interactClip = animations.find((a) => a.name.toLowerCase().includes('interact')) || sitClip;
 
       if (walkClip) this.walkAction = this.mixer.clipAction(walkClip);
       if (idleClip) this.idleAction = this.mixer.clipAction(idleClip);
-      if (interactClip) this.interactAction = this.mixer.clipAction(interactClip);
+      if (sitClip) this.sitAction = this.mixer.clipAction(sitClip);
+      if (clapClip) this.clapAction = this.mixer.clipAction(clapClip);
       if (waveClip) this.waveAction = this.mixer.clipAction(waveClip);
+      if (interactClip) this.interactAction = this.mixer.clipAction(interactClip);
 
       this.playAction(this.walkAction || this.idleAction);
     }
@@ -169,8 +166,9 @@ export class Customer {
   public moveTo(destination: THREE.Vector3, nextState?: CustomerState, ignoreStationId?: string) {
     if (nextState) this.state = nextState;
     this.targetPosition.copy(destination);
+    this.currentIgnoreStationId = ignoreStationId || this.assignedStation?.id;
 
-    const stationId = ignoreStationId || this.assignedStation?.id;
+    const stationId = this.currentIgnoreStationId;
 
     if (this.gridSystem) {
       const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
@@ -207,7 +205,8 @@ export class Customer {
       }
 
       const ignoreStationId =
-        this.state === 'WALKING_TO_STATION' ? this.assignedStation?.id : undefined;
+      this.currentIgnoreStationId ||
+        (this.state === 'WALKING_TO_STATION' ? this.assignedStation?.id : undefined);
 
       if (this.currentWaypointIndex < this.waypoints.length) {
         const isFinal = this.currentWaypointIndex === this.waypoints.length - 1;
@@ -215,7 +214,7 @@ export class Customer {
         const dir = currentTarget.clone().sub(this.group.position);
         dir.y = 0;
         const distance = dir.length();
-        const threshold = isFinal ? 0.20 : 0.40;
+        const threshold = isFinal ? 0.25 : 0.40;
 
         if (distance > threshold) {
           dir.normalize();
@@ -355,7 +354,10 @@ export class Customer {
         this.stuckTimer += deltaTime;
         if (this.stuckTimer > 0.4) {
           this.stuckTimer = 0;
-          const distToFinal = this.group.position.distanceTo(this.targetPosition);
+          const distToFinal = Math.hypot(
+            this.group.position.x - this.targetPosition.x,
+            this.group.position.z - this.targetPosition.z
+          );
           if (distToFinal <= 0.50) {
             // Truly at destination
             this.group.position.copy(this.targetPosition);
@@ -366,7 +368,7 @@ export class Customer {
           } else if (this.gridSystem) {
             // Recompute path around current blockage with 0.40m clearance
             const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
-              this.collisionSystem?.isSegmentBlocked(p1, p2, 0.40, this.assignedStation?.id) ?? false;
+            this.collisionSystem?.isSegmentBlocked(p1, p2, 0.40, ignoreStationId) ?? false;
             const newPath = this.gridSystem.findPath(this.group.position, this.targetPosition, isBlocked);
             if (newPath && newPath.length > 0) {
               this.waypoints = newPath;
@@ -383,10 +385,9 @@ export class Customer {
         this.collisionSystem.resolveCollision(this.group.position, 0.28, ignoreStationId);
       }
     } else if (this.state === 'WAITING_CHECKIN') {
-      if (this.waveAction && !this.currentAction) {
-        this.playAction(this.waveAction);
-      } else if (!this.currentAction || this.currentAction === this.walkAction) {
-        this.playAction(this.idleAction);
+      const waitAction = this.clapAction || this.waveAction || this.idleAction;
+      if (waitAction && (!this.currentAction || this.currentAction === this.walkAction)) {
+        this.playAction(waitAction);
       }
     } else if (this.state === 'GAMING') {
       this.gamingTimer += deltaTime;
@@ -411,7 +412,7 @@ export class Customer {
       } else {
         this.group.rotation.y = Math.PI;
       }
-      this.playAction(this.waveAction || this.idleAction);
+      this.playAction(this.clapAction || this.waveAction || this.idleAction);
       if (this.onCheckIn) {
         this.onCheckIn(this);
       }
@@ -427,8 +428,8 @@ export class Customer {
         this.group.position.copy(stationPos);
         this.group.rotation.y = this.assignedStation.group.rotation.y + Math.PI;
 
-        // Play interact (standing gaming with hands on keyboard & mouse)
-        this.playAction(this.interactAction || this.idleAction);
+        // Play sitting animation when customer is gaming at the station chair
+        this.playAction(this.sitAction || this.interactAction || this.idleAction);
       }
     } else if (this.state === 'LEAVING') {
       this.state = 'DESPAWNED';
@@ -453,6 +454,9 @@ export class Customer {
       this.assignedStation.currentGamerId = undefined;
       this.assignedStation = undefined;
     }
+
+    // Reset Y back to floor level (0) when standing up from chair
+    this.group.position.y = 0;
 
     // Walk towards lounge exit (doorway at Z = 7.8)
     this.moveTo(new THREE.Vector3(0, 0, 7.8), 'LEAVING', oldStationId);

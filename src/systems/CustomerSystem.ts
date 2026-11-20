@@ -51,8 +51,8 @@ export class CustomerSystem {
     }
 
     // Uniformed corporate receptionist model from Women pack
-    const receptionistModel = await assetMgr.loadModel('/assets/models/characters/women/Suit.glb');
-    receptionistModel.scale.setScalar(1.0);
+    const receptionistModel = await assetMgr.loadModel('/assets/models/characters/women/Woman in Dress.glb');
+    receptionistModel.scale.setScalar(0.30);
 
     receptionistModel.traverse((child) => {
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
@@ -92,9 +92,12 @@ export class CustomerSystem {
             a.name.toLowerCase().includes('idle') &&
             !a.name.toLowerCase().includes('gun') &&
             !a.name.toLowerCase().includes('sword')
-        ) || animations[0];
-      const waveClip = animations.find((a) => a.name.toLowerCase().includes('wave'));
-      const interactClip = animations.find((a) => a.name.toLowerCase().includes('interact'));
+        ) ||
+        animations.find((a) => a.name.toLowerCase().includes('standing')) ||
+        animations[0];
+      const clapClip = animations.find((a) => a.name.toLowerCase().includes('clap'));
+      const waveClip = animations.find((a) => a.name.toLowerCase().includes('wave')) || clapClip;
+      const interactClip = animations.find((a) => a.name.toLowerCase().includes('interact')) || clapClip;
 
       if (idleClip) idleAction = mixer.clipAction(idleClip);
       if (waveClip) waveAction = mixer.clipAction(waveClip);

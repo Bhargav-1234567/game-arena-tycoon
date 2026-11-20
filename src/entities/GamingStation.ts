@@ -371,9 +371,10 @@ export class GamingStation {
 
   public getSeatingWorldPosition(): THREE.Vector3 {
     // World position where the customer sits (directly on chair cushion facing the desk)
-    const chairZ = this.computedChairZ;
-    const seatZ = chairZ;
-    const localSeat = new THREE.Vector3(0, 0, seatZ);
+    // Shift forward along Z (-0.08m towards desk) so the character's back does not clip out through the rear backrest.
+    // Elevate along Y (+0.18m) so buttocks rest flush on top of the seat cushion rather than sinking through to the floor.
+    const chairZ = this.computedChairZ - 0.08;
+    const localSeat = new THREE.Vector3(0, 0.18, chairZ);
     localSeat.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(localSeat);
   }

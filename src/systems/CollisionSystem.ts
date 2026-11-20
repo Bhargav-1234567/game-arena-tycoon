@@ -74,6 +74,12 @@ export class CollisionSystem {
 
     // 2. Gaming Stations (Desk and Chair)
     for (const [id, station] of this.placementSystem.stations.entries()) {
+      // If this is the assigned station of the moving customer, skip both its desk and chair
+      // so the customer can smoothly walk in and take their seat without collision pushback
+      if (id === ignoreStationId) {
+        continue;
+      }
+
       const pos = station.group.position;
       const rot = station.rotationIndex % 2 === 0;
 
@@ -89,18 +95,16 @@ export class CollisionSystem {
         type: 'desk'
       });
 
-      // Chair body (if not the assigned station of the moving customer)
-      if (id !== ignoreStationId) {
-        const chairPos = station.getSeatingWorldPosition();
-        obstacles.push({
-          id: `${id}_chair`,
-          minX: chairPos.x - 0.35,
-          maxX: chairPos.x + 0.35,
-          minZ: chairPos.z - 0.35,
-          maxZ: chairPos.z + 0.35,
-          type: 'chair'
-        });
-      }
+      // Chair body
+      const chairPos = station.getSeatingWorldPosition();
+      obstacles.push({
+        id: `${id}_chair`,
+        minX: chairPos.x - 0.35,
+        maxX: chairPos.x + 0.35,
+        minZ: chairPos.z - 0.35,
+        maxZ: chairPos.z + 0.35,
+        type: 'chair'
+      });
     }
 
     // 3. Facilities (Arcade, Vending, Sofa)

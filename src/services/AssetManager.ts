@@ -31,7 +31,7 @@ export class AssetManager {
   }
 
   public async loadMenAnimations(): Promise<THREE.AnimationClip[]> {
-    const animUrl = '/assets/models/characters/men/Casual Character.glb';
+    const animUrl = '/assets/models/characters/men/Man.glb';
     if (!this.animationsCache.has(animUrl)) {
       await this.loadModel(animUrl);
     }
@@ -39,7 +39,7 @@ export class AssetManager {
   }
 
   public async loadWomenAnimations(): Promise<THREE.AnimationClip[]> {
-    const animUrl = '/assets/models/characters/women/Animated Woman.glb';
+    const animUrl = '/assets/models/characters/women/Woman.glb';
     if (!this.animationsCache.has(animUrl)) {
       await this.loadModel(animUrl);
     }

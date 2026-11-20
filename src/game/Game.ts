@@ -181,11 +181,14 @@ export class Game {
       '/assets/models/furniture/sofas/sofa_lvl3.glb',
       '/assets/models/furniture/sofas/sofa_lvl4.glb',
       // Characters & Animation Suite
-      '/assets/models/characters/women/Animated Woman.glb',
-      '/assets/models/characters/women/Suit.glb',
-      '/assets/models/characters/men/Casual Character.glb',
-      '/assets/models/characters/men/Hoodie Character.glb',
-      '/assets/models/characters/men/Punk.glb'
+      '/assets/models/characters/women/Woman.glb',
+      '/assets/models/characters/women/Woman in Dress.glb',
+      '/assets/models/characters/women/Woman Casual.glb',
+      '/assets/models/characters/women/Woman in Tank Top.glb',
+      '/assets/models/characters/men/Man.glb',
+      '/assets/models/characters/men/Man in Long Sleeves.glb',
+      '/assets/models/characters/men/Man in Suit.glb',
+      '/assets/models/characters/men/Man-fjHyMd5Wxw.glb'
     ]);
 
     // Ensure both Men and Women character animation suites are ready
