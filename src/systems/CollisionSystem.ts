@@ -217,15 +217,22 @@ export class CollisionSystem {
       if (!pushed) break;
     }
 
-    // 2. Room Outer Perimeter Walls (except door opening at Z = 7.5 between X = -1.2 and +1.2)
-    pos.x = Math.max(this.roomBounds.minX + radius, Math.min(this.roomBounds.maxX - radius, pos.x));
-    pos.z = Math.max(this.roomBounds.minZ + radius, pos.z);
+    // 2. Room Outer Perimeter Walls & Exterior Sidewalk Boundaries
+    if (pos.z <= this.roomBounds.maxZ + 0.20) {
+      // Inside room bounds
+      pos.x = Math.max(this.roomBounds.minX + radius, Math.min(this.roomBounds.maxX - radius, pos.x));
+      pos.z = Math.max(this.roomBounds.minZ + radius, pos.z);
 
-    // Entrance wall: only allow passage through doorway (width between X = -0.95 and +0.95)
-    if (pos.z > this.roomBounds.maxZ - radius) {
-      if (Math.abs(pos.x) > 0.95) {
-        pos.z = this.roomBounds.maxZ - radius;
+      // Entrance wall: only allow passage through doorway (width between X = -0.95 and +0.95)
+      if (pos.z > this.roomBounds.maxZ - radius) {
+        if (Math.abs(pos.x) > 0.95) {
+          pos.z = this.roomBounds.maxZ - radius;
+        }
       }
+    } else {
+      // Exterior sidewalk & forecourt bounds (X: [-24, 28], Z: [8.0, 12.8] before roadway curb)
+      pos.x = Math.max(-24.0, Math.min(28.0, pos.x));
+      pos.z = Math.min(12.8, Math.max(this.roomBounds.maxZ, pos.z));
     }
 
     return pos;
@@ -274,17 +281,24 @@ export class CollisionSystem {
     radius: number = 0.30,
     ignoreStationId?: string
   ): boolean {
-    // 1. Room boundaries
-    if (
-      x < this.roomBounds.minX + radius ||
-      x > this.roomBounds.maxX - radius ||
-      z < this.roomBounds.minZ + radius
-    ) {
-      return true;
-    }
-    // Entrance wall: only doorway (X in [-0.95, +0.95]) allows passing z > roomBounds.maxZ - radius
-    if (z > this.roomBounds.maxZ - radius) {
-      if (Math.abs(x) > 0.95) return true;
+    // 1. Room & Exterior Sidewalk Boundaries
+    if (z <= this.roomBounds.maxZ + 0.20) {
+      if (
+        x < this.roomBounds.minX + radius ||
+        x > this.roomBounds.maxX - radius ||
+        z < this.roomBounds.minZ + radius
+      ) {
+        return true;
+      }
+      // Entrance wall: only doorway (X in [-0.95, +0.95]) allows passing z > roomBounds.maxZ - radius
+      if (z > this.roomBounds.maxZ - radius) {
+        if (Math.abs(x) > 0.95) return true;
+      }
+    } else {
+      // Exterior sidewalk boundaries (X: [-24, 28], Z: [8.0, 12.8])
+      if (x < -24.0 || x > 28.0 || z > 12.8) {
+        return true;
+      }
     }
 
     // 2. Solid obstacles

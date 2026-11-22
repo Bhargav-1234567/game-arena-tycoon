@@ -10,6 +10,12 @@ export class CameraController {
   private minZoom: number = 4;
   private maxZoom: number = 24;
 
+  // Camera pan target clamp bounds (aligned with exterior city environment)
+  private minTargetX: number = -14.0;
+  private maxTargetX: number = 18.0;
+  private minTargetZ: number = -12.0;
+  private maxTargetZ: number = 14.0;
+
   private isDragging: boolean = false;
   private dragStart: THREE.Vector2 = new THREE.Vector2();
   private domElement: HTMLElement;
@@ -69,6 +75,7 @@ export class CameraController {
 
       this.target.addScaledVector(right, -deltaX);
       this.target.addScaledVector(forward, -deltaY);
+      this.clampTarget();
 
       this.dragStart.set(e.clientX, e.clientY);
     });
@@ -109,9 +116,24 @@ export class CameraController {
 
   public setCenter(pos: THREE.Vector3) {
     this.target.copy(pos);
+    this.clampTarget();
+  }
+
+  public setPanBounds(minX: number, maxX: number, minZ: number, maxZ: number) {
+    this.minTargetX = minX;
+    this.maxTargetX = maxX;
+    this.minTargetZ = minZ;
+    this.maxTargetZ = maxZ;
+    this.clampTarget();
+  }
+
+  private clampTarget() {
+    this.target.x = THREE.MathUtils.clamp(this.target.x, this.minTargetX, this.maxTargetX);
+    this.target.z = THREE.MathUtils.clamp(this.target.z, this.minTargetZ, this.maxTargetZ);
   }
 
   public update(deltaTime: number) {
+    this.clampTarget();
     // Smooth dampening towards target
     const lerpSpeed = Math.min(1.0, deltaTime * 12);
     this.currentTarget.lerp(this.target, lerpSpeed);

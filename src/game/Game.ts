@@ -9,6 +9,7 @@ import { StaffSystem } from '../systems/StaffSystem.ts';
 import { ParticleSystem } from '../services/ParticleSystem.ts';
 import { AssetManager } from '../services/AssetManager.ts';
 import { ExpansionSystem } from '../systems/ExpansionSystem.ts';
+import { ExteriorEnvironmentSystem } from '../systems/ExteriorEnvironmentSystem.ts';
 import { TopBar } from '../ui/TopBar.ts';
 import { BuildMenu } from '../ui/BuildMenu.ts';
 import { StationInspector } from '../ui/StationInspector.ts';
@@ -23,6 +24,7 @@ export class Game {
   public placementSystem: PlacementSystem;
   public customerSystem: CustomerSystem;
   public expansionSystem: ExpansionSystem;
+  public exteriorEnvironmentSystem: ExteriorEnvironmentSystem;
   public economySystem: EconomySystem;
   public staffSystem: StaffSystem;
   public particleSystem: ParticleSystem;
@@ -67,6 +69,7 @@ export class Game {
       this.particleSystem
     );
     this.expansionSystem.collisionSystem = this.customerSystem.collisionSystem;
+    this.exteriorEnvironmentSystem = new ExteriorEnvironmentSystem(this.sceneManager.scene);
 
     // Setup UI components
     this.topBar = new TopBar(uiContainer, this.economySystem);
@@ -188,7 +191,17 @@ export class Game {
       '/assets/models/characters/men/Man.glb',
       '/assets/models/characters/men/Man in Long Sleeves.glb',
       '/assets/models/characters/men/Man in Suit.glb',
-      '/assets/models/characters/men/Man-fjHyMd5Wxw.glb'
+      '/assets/models/characters/men/Man-fjHyMd5Wxw.glb',
+      // Exterior City Environment & Vehicles
+      '/assets/models/environment/city/Big Building.glb',
+      '/assets/models/environment/city/Building Green.glb',
+      '/assets/models/environment/city/Brown Building.glb',
+      '/assets/models/environment/city/Building Red.glb',
+      '/assets/models/environment/city/Pizza Corner.glb',
+      '/assets/models/environment/city/Car.glb',
+      '/assets/models/environment/city/Sports Car.glb',
+      '/assets/models/environment/city/SUV.glb',
+      '/assets/models/environment/city/Police Car.glb'
     ]);
 
     // Ensure both Men and Women character animation suites are ready
@@ -204,13 +217,17 @@ export class Game {
     await this.expansionSystem.setup();
     this.buildMenu.updateExpandButton(this.expansionSystem.getCurrentPrice());
 
-    // 4. Place Initial Starting Assets (Reception Counter + Receptionist + 2 Gaming Stations + Facilities)
+    // 4. Initialize Exterior City Environment & Camera Borders
+    this.cameraController.setPanBounds(-14.0, 18.0, -12.0, 14.0);
+    await this.exteriorEnvironmentSystem.init();
+
+    // 5. Place Initial Starting Assets (Reception Counter + Receptionist + 2 Gaming Stations + Facilities)
     await this.setupInitialGamingRoom();
 
-    // 5. Spawn starting customer immediately
+    // 6. Spawn starting customer immediately
     await this.customerSystem.spawnInitialCustomer();
 
-    // 6. Start Game Render Loop
+    // 7. Start Game Render Loop
     this.animate();
   }
 
@@ -358,6 +375,7 @@ export class Game {
     this.particleSystem.update(deltaTime);
     this.floatingTextManager.update(deltaTime);
     this.expansionSystem.update(elapsedTime);
+    this.exteriorEnvironmentSystem.update(deltaTime);
 
     // Update stations RGB animations
     this.placementSystem.stations.forEach((station) => {

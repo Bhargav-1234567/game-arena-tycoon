@@ -272,8 +272,11 @@ export class CustomerSystem {
     const id = `cust_${Date.now()}_${Math.floor(Math.random() * 100)}`;
     const customer = new Customer(id);
 
-    // Spawn directly at the entrance doorway opening
-    const spawnPos = new THREE.Vector3(0, 0, 7.8);
+    // Spawn outside on the exterior city sidewalk
+    const isLeft = Math.random() > 0.5;
+    const spawnX = isLeft ? -13.0 : 13.0;
+    const spawnPos = new THREE.Vector3(spawnX, 0.04, 10.5);
+
     customer.collisionSystem = this.collisionSystem;
     customer.gridSystem = this.placementSystem.gridSystem;
     customer.getOtherCustomerPositions = () => {
@@ -333,7 +336,33 @@ export class CustomerSystem {
     this.deskQueues.set(bestDesk.id, q);
 
     const waitSpot = bestDesk.getCustomerQueuePosition(queueIndex);
-    customer.moveTo(waitSpot, 'WALKING_TO_RECEPTION');
+
+    // Route from exterior sidewalk -> entrance forecourt (0, 10.5) -> red doorway (0, 8.0) -> inside door (0, 7.0) -> reception queue
+    const arrivalWaypoints: THREE.Vector3[] = [
+      new THREE.Vector3(spawnX * 0.5, 0.04, 10.5),
+      new THREE.Vector3(0, 0.04, 10.5),
+      new THREE.Vector3(0, 0.04, 8.0),
+      new THREE.Vector3(0, 0.04, 7.0)
+    ];
+
+    if (this.placementSystem.gridSystem) {
+      const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
+        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.50) ?? false;
+      const insidePath = this.placementSystem.gridSystem.findPath(
+        new THREE.Vector3(0, 0, 7.0),
+        waitSpot,
+        isBlocked
+      );
+      if (insidePath && insidePath.length > 0) {
+        arrivalWaypoints.push(...insidePath);
+      } else {
+        arrivalWaypoints.push(waitSpot.clone());
+      }
+    } else {
+      arrivalWaypoints.push(waitSpot.clone());
+    }
+
+    customer.setWaypoints(arrivalWaypoints, 'WALKING_TO_RECEPTION');
   }
 
   public getActiveCustomerCount(): number {

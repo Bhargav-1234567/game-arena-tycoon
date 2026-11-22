@@ -183,6 +183,18 @@ export class Customer {
     this.playAction(this.walkAction);
   }
 
+  public setWaypoints(waypoints: THREE.Vector3[], nextState?: CustomerState, ignoreStationId?: string) {
+    if (nextState) this.state = nextState;
+    if (waypoints.length > 0) {
+      this.targetPosition.copy(waypoints[waypoints.length - 1]);
+    }
+    this.currentIgnoreStationId = ignoreStationId || this.assignedStation?.id;
+    this.waypoints = waypoints;
+    this.currentWaypointIndex = 0;
+    this.stuckTimer = 0;
+    this.playAction(this.walkAction);
+  }
+
   public update(deltaTime: number) {
     if (this.state === 'DESPAWNED') return;
 
@@ -195,8 +207,12 @@ export class Customer {
       this.state === 'WALKING_TO_STATION' ||
       this.state === 'LEAVING'
     ) {
-      // Early exit check for leaving customers reaching the doorway
-      if (this.state === 'LEAVING' && this.group.position.z >= 7.6) {
+      // Exterior exit check: leaving customers despawn after visibly walking down the exterior city sidewalk
+      if (
+        this.state === 'LEAVING' &&
+        Math.abs(this.group.position.x) >= 13.5 &&
+        this.group.position.z >= 9.5
+      ) {
         this.state = 'DESPAWNED';
         if (this.onFinished) {
           this.onFinished(this);
@@ -458,7 +474,37 @@ export class Customer {
     // Reset Y back to floor level (0) when standing up from chair
     this.group.position.y = 0;
 
-    // Walk towards lounge exit (doorway at Z = 7.8)
-    this.moveTo(new THREE.Vector3(0, 0, 7.8), 'LEAVING', oldStationId);
+    // Route customer out through the doorway and onto the exterior sidewalk
+    const exitX = Math.random() > 0.5 ? -15.0 : 15.0;
+    const exitWaypoints: THREE.Vector3[] = [];
+
+    // 1. Pathfind inside from current station chair to inside door approach (0, 0, 7.0)
+    if (this.gridSystem) {
+      const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
+        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.45, oldStationId) ?? false;
+      const insidePath = this.gridSystem.findPath(
+        this.group.position,
+        new THREE.Vector3(0, 0, 7.0),
+        isBlocked
+      );
+      if (insidePath && insidePath.length > 0) {
+        exitWaypoints.push(...insidePath);
+      } else {
+        exitWaypoints.push(new THREE.Vector3(0, 0, 7.0));
+      }
+    } else {
+      exitWaypoints.push(new THREE.Vector3(0, 0, 7.0));
+    }
+
+    // 2. Cross doorway (0, 0, 8.0)
+    exitWaypoints.push(new THREE.Vector3(0, 0, 8.0));
+
+    // 3. Walk through entrance forecourt (0, 0, 10.5)
+    exitWaypoints.push(new THREE.Vector3(0, 0, 10.5));
+
+    // 4. Stroll down exterior city sidewalk to despawn point
+    exitWaypoints.push(new THREE.Vector3(exitX, 0, 10.5));
+
+    this.setWaypoints(exitWaypoints, 'LEAVING', oldStationId);
   }
 }
