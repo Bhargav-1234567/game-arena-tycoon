@@ -6,6 +6,7 @@ import { SoundManager } from '../services/SoundManager.ts';
 import { AssetManager } from '../services/AssetManager.ts';
 import { CollisionSystem } from './CollisionSystem.ts';
 import { SaveManager } from '../services/SaveManager.ts';
+import { ROOM_FOOTPRINTS } from '../data/world-layout.ts';
 
 export interface ExpansionStageDef {
   stage: number;
@@ -17,6 +18,7 @@ export interface ExpansionStageDef {
 }
 
 export class ExpansionSystem {
+  public onSave?: () => void;
   private scene: THREE.Scene;
   private gridSystem: GridSystem;
   private economySystem: EconomySystem;
@@ -31,7 +33,7 @@ export class ExpansionSystem {
     {
       stage: 1,
       price: 500,
-      bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[1],
       previewBounds: { minX: -6, maxX: 6, minZ: -6, maxZ: -2 },
       markerPos: new THREE.Vector3(0, 0.04, -1.0),
       name: 'North VIP Wing (+4m Depth)'
@@ -39,7 +41,7 @@ export class ExpansionSystem {
     {
       stage: 2,
       price: 1000,
-      bounds: { minX: -6, maxX: 10, minZ: -6, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[2],
       previewBounds: { minX: 6, maxX: 10, minZ: -6, maxZ: 8 },
       markerPos: new THREE.Vector3(5.0, 0.04, 1.0),
       name: 'East Arcade Hall (+4m Width)'
@@ -47,7 +49,7 @@ export class ExpansionSystem {
     {
       stage: 3,
       price: 1500,
-      bounds: { minX: -6, maxX: 10, minZ: -10, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[3],
       previewBounds: { minX: -6, maxX: 10, minZ: -10, maxZ: -6 },
       markerPos: new THREE.Vector3(2.0, 0.04, -5.0),
       name: 'Pro Gaming Arena (+4m Depth)'
@@ -55,7 +57,7 @@ export class ExpansionSystem {
     {
       stage: 4,
       price: 2000,
-      bounds: { minX: -6, maxX: 14, minZ: -10, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[4],
       previewBounds: { minX: 10, maxX: 14, minZ: -10, maxZ: 8 },
       markerPos: new THREE.Vector3(9.0, 0.04, 1.0),
       name: 'Tournament Hall (+4m Width)'
@@ -63,7 +65,7 @@ export class ExpansionSystem {
     {
       stage: 5,
       price: 2500,
-      bounds: { minX: -10, maxX: 14, minZ: -10, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[5],
       previewBounds: { minX: -10, maxX: -6, minZ: -10, maxZ: 8 },
       markerPos: new THREE.Vector3(-5.0, 0.04, 1.0),
       name: 'West Streamer Lounge (+4m Width)'
@@ -71,7 +73,7 @@ export class ExpansionSystem {
     {
       stage: 6,
       price: 3000,
-      bounds: { minX: -10, maxX: 14, minZ: -14, maxZ: 8 },
+      bounds: ROOM_FOOTPRINTS[6],
       previewBounds: { minX: -10, maxX: 14, minZ: -14, maxZ: -10 },
       markerPos: new THREE.Vector3(2.0, 0.04, -9.0),
       name: 'Grand Esports Colosseum (+4m Depth)'
@@ -79,7 +81,9 @@ export class ExpansionSystem {
   ];
 
   // Current active room bounds
-  public currentBounds = { minX: -6, maxX: 6, minZ: -2, maxZ: 8 };
+  public currentBounds = { ...ROOM_FOOTPRINTS[0] };
+  private cutaway = false;
+  private expanding = false;
 
   // Building Kit Models Cache
   private wallSolidModel?: THREE.Group;
@@ -313,6 +317,16 @@ export class ExpansionSystem {
       neon.position.set(centerX, 1.85, minZ + 0.15);
       this.wallsGroup.add(neon);
     }
+    this.setCutaway(this.cutaway);
+  }
+
+  public setCutaway(cutaway: boolean): void {
+    this.cutaway = cutaway;
+    for (const child of this.wallsGroup.children) {
+      child.visible = !cutaway || !(child.position.z >= this.currentBounds.maxZ - .15 || child.position.x >= this.currentBounds.maxX - .15);
+    }
+    this.markerGroup.visible = cutaway && this.currentStage < this.maxStage;
+    this.previewGroup.visible = cutaway && this.currentStage < this.maxStage;
   }
 
   /**
@@ -543,6 +557,13 @@ export class ExpansionSystem {
   }
 
   public async tryExpand(): Promise<boolean> {
+    if (this.expanding) return false;
+    this.expanding = true;
+    try { return await this.expandCurrent(); }
+    finally { this.expanding = false; }
+  }
+
+  private async expandCurrent(): Promise<boolean> {
     const nextStage = this.getCurrentStageDef();
     if (!nextStage) return false;
 
@@ -660,6 +681,7 @@ export class ExpansionSystem {
   }
 
   private saveState() {
+    if (this.onSave) { this.onSave(); return; }
     const saveMgr = SaveManager.getInstance();
     const existing = saveMgr.load();
     if (existing) {

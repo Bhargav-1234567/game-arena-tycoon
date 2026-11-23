@@ -4,10 +4,16 @@ import { EconomySystem } from './EconomySystem.ts';
 import { AssetManager } from '../services/AssetManager.ts';
 import { SoundManager } from '../services/SoundManager.ts';
 import { ParticleSystem } from '../services/ParticleSystem.ts';
-import { BuildableItem, BUILDABLE_ITEMS } from '../data/assets.ts';
+import { type BuildableItem, BUILDABLE_ITEMS } from '../data/assets.ts';
 import { GamingStation } from '../entities/GamingStation.ts';
 import { ReceptionDesk } from '../entities/ReceptionDesk.ts';
-import { FacilityEntity, FacilityType } from '../entities/FacilityEntity.ts';
+import { FacilityEntity, type FacilityType } from '../entities/FacilityEntity.ts';
+import type { GameSaveState } from '../services/SaveManager.ts';
+import { CollisionSystem } from './CollisionSystem.ts';
+import { circleOverlaps, geometryFor, overlaps, wallOffset } from './LayoutGeometry.ts';
+import type { PlacementGeometry } from './LayoutGeometry.ts';
+import { CUSTOMER_RADIUS, NAVIGATION_RADIUS } from '../data/simulation.ts';
+import { NAVIGATION } from '../data/world-layout.ts';
 
 export interface MovingItemContext {
   type: 'station' | 'reception' | 'facility' | 'object';
@@ -22,6 +28,13 @@ export interface MovingItemContext {
 }
 
 export class PlacementSystem {
+  public collisionSystem: CollisionSystem;
+  public layoutRevision = 0;
+  public validationMessage = '';
+  public onValidationChanged?: (message: string) => void;
+  public getCustomerBodies: () => { x: number; z: number; stationId?: string }[] = () => [];
+  public getTechnicianMultiplier: () => number = () => 1;
+  public busy = false;
   private scene: THREE.Scene;
   public gridSystem: GridSystem;
   private economySystem: EconomySystem;
@@ -33,6 +46,7 @@ export class PlacementSystem {
   private ghostGroup: THREE.Group = new THREE.Group();
   private ghostModel?: THREE.Group;
   private ghostLoadToken: number = 0;
+  private previewError = '';
   private footprintGroup: THREE.Group = new THREE.Group();
   private footprintMesh?: THREE.Mesh;
   private footprintLines?: THREE.LineSegments;
@@ -73,6 +87,7 @@ export class PlacementSystem {
     this.scene = scene;
     this.gridSystem = gridSystem;
     this.economySystem = economySystem;
+    this.collisionSystem = new CollisionSystem(this);
 
     // Semi-transparent 3D hologram ghost group
     this.ghostGroup.name = 'BuildGhostGroup';
@@ -85,43 +100,115 @@ export class PlacementSystem {
     this.scene.add(this.footprintGroup);
   }
 
+  public getPlacedGeometries(): PlacementGeometry[] {
+    const result: PlacementGeometry[] = [], stationItem = BUILDABLE_ITEMS.find((item) => item.category === 'station')!;
+    for (const station of this.stations.values()) if (station.group.visible) result.push(geometryFor(stationItem, station.gridX, station.gridZ, station.rotationIndex, station.id, station.currentChair.level, station.currentDesk.level));
+    for (const desk of this.receptionDesks.values()) if (desk.group.visible) result.push(geometryFor(BUILDABLE_ITEMS.find((item) => item.id.startsWith('reception'))!, desk.gridX, desk.gridZ, desk.rotationIndex, desk.id));
+    for (const facility of this.facilities.values()) if (facility.group.visible) result.push(geometryFor(BUILDABLE_ITEMS.find((item) => item.id.startsWith(facility.type))!, facility.gridX, facility.gridZ, facility.rotationIndex, facility.id));
+    for (const object of [...this.decorObjects, ...this.buildingObjects]) {
+      if (!object.visible) continue;
+      const data = object.userData, id = data.persistentId ?? object.uuid;
+      if (data.item) result.push(geometryFor(data.item, data.gridX, data.gridZ, data.rotationIndex ?? 0, id));
+      else if (!data.isWalkable) {
+        const box = { minX: object.position.x - (data.halfW ?? .5), maxX: object.position.x + (data.halfW ?? .5),
+          minZ: object.position.z - (data.halfD ?? .5), maxZ: object.position.z + (data.halfD ?? .5) };
+        result.push({ id, item: BUILDABLE_ITEMS.find((item) => item.id === 'plant_indoor')!, reserved: box, center: object.position,
+          solids: [{ ...box, id, type: 'wall' }], access: [] });
+      }
+    }
+    return result;
+  }
+
+  private movingId(): string | undefined {
+    const ctx = this.movingItemContext;
+    return ctx?.station?.id ?? ctx?.reception?.id ?? ctx?.facility?.id ?? ctx?.object?.userData.persistentId ?? ctx?.object?.uuid;
+  }
+
+  private candidate(): PlacementGeometry | undefined {
+    if (!this.activeItem) return;
+    const station = this.movingItemContext?.station;
+    return geometryFor(this.activeItem, this.currentGridPos.x, this.currentGridPos.z, this.rotationIndex,
+      this.movingId() ?? 'candidate', station?.currentChair.level, station?.currentDesk.level);
+  }
+
+  private reserve(item: BuildableItem, x: number, z: number, rotation: number, id: string): void {
+    if (item.category === 'building' && (item.id.startsWith('floor_') || item.id.includes('doorway'))) return;
+    const box = geometryFor(item, x, z, rotation).reserved;
+    this.gridSystem.setOccupied(box.minX, box.minZ, box.maxX - box.minX, box.maxZ - box.minZ, true, id);
+  }
+
+  public routeTo(point: { x: number; z: number }, geometry = this.getPlacedGeometries()): THREE.Vector3[] {
+    const query = this.collisionSystem.createNavigationQuery(NAVIGATION_RADIUS, undefined, geometry.flatMap((entry) => entry.solids));
+    return this.gridSystem.findPath(new THREE.Vector3(NAVIGATION.doorX, 0, NAVIGATION.insideZ), new THREE.Vector3(point.x, 0, point.z), query);
+  }
+
+  public validateGeometry(candidate: PlacementGeometry): string {
+    const bounds = this.gridSystem.unlockedBounds, area = candidate.reserved;
+    if (area.minX < bounds.minX || area.maxX > bounds.maxX || area.minZ < bounds.minZ || area.maxZ > bounds.maxZ ||
+      candidate.solids.some((box) => box.minX < bounds.minX - .001 || box.maxX > bounds.maxX + .001 || box.minZ < bounds.minZ - .001 || box.maxZ > bounds.maxZ + .001)) return 'Keep the furniture and its chair/staff space inside the room.';
+    if (!candidate.solids.length) return '';
+    if (!this.gridSystem.canOccupy(area.minX, area.minZ, area.maxX - area.minX, area.maxZ - area.minZ, candidate.id)) return 'This space is reserved by furniture, a chair approach or reception staff.';
+    if (overlaps(area, { minX: -1.1, maxX: 1.1, minZ: 6.65, maxZ: NAVIGATION.doorZ + .2 })) return 'Keep the entrance clear for arriving and departing customers.';
+    const existing = this.getPlacedGeometries().filter((entry) => entry.id !== candidate.id);
+    if (existing.some((entry) => entry.solids.length && overlaps(area, entry.reserved))) return 'Leave the highlighted chair and staff access areas clear.';
+    if (candidate.solids.some((box) => existing.some((entry) => entry.solids.some((other) => overlaps(box, other))))) return 'Furniture bodies cannot overlap.';
+    if (this.getCustomerBodies().some((person) => person.stationId !== candidate.id && candidate.solids.some((box) => circleOverlaps(person, CUSTOMER_RADIUS, box)))) return 'A customer is in the way. Wait for them to pass.';
+    const proposed = [...existing, candidate];
+    if (candidate.access.some((point) => !this.routeTo(point, proposed).length)) return 'Leave a clear route from the entrance to the chair or all three queue positions.';
+    if (candidate.seat && existing.some((entry) => entry.solids.some((box) => circleOverlaps(candidate.seat!, CUSTOMER_RADIUS, box)))) return 'Another object blocks this chair.';
+    for (const entry of existing) for (const point of entry.access) {
+      if (this.routeTo(point, existing).length && !this.routeTo(point, proposed).length) return 'This would block access to an existing chair or reception queue.';
+    }
+    for (const person of this.getCustomerBodies()) {
+      if (this.routeTo(person, existing).length && !this.routeTo(person, proposed).length) return 'This would trap a customer. Keep a route to the exit open.';
+    }
+    return '';
+  }
+
+  public refreshLayout(): void {
+    this.layoutRevision++;
+    const entries = this.getPlacedGeometries();
+    for (const station of this.stations.values()) {
+      const entry = entries.find((item) => item.id === station.id);
+      station.accessIssue = !entry ? 'Being moved' : entry.seat && entries.some((other) => other.id !== entry.id && other.solids.some((box) => circleOverlaps(entry.seat!, CUSTOMER_RADIUS, box)))
+        ? 'Chair blocked by furniture' : !this.routeTo(entry.access[0], entries).length ? 'No clear route to chair' : '';
+    }
+    const blocked = [...this.stations.values()].filter((station) => station.group.visible && station.accessIssue).length;
+    this.onValidationChanged?.(blocked ? `${blocked} PC${blocked === 1 ? ' has' : 's have'} blocked chair access. Move nearby furniture to clear a route.` : '');
+  }
+
+  private configureStation(station: GamingStation): void {
+    station.getTechnicianMultiplier = () => this.getTechnicianMultiplier();
+    station.validateLayoutChange = (chairLevel, deskLevel) => {
+      if (station.isOccupied) throw new Error('Wait for this customer to leave before changing the desk or chair.');
+      const error = this.validateGeometry(geometryFor(BUILDABLE_ITEMS.find((item) => item.category === 'station')!, station.gridX, station.gridZ, station.rotationIndex, station.id, chairLevel, deskLevel));
+      if (error) throw new Error(error);
+    };
+    station.onLayoutChanged = () => this.refreshLayout();
+  }
+
   public getBuildingWallOffset(
     item: BuildableItem,
     rotationIndex: number
   ): { x: number; z: number } {
-    const isWall =
-      item.category === 'building' &&
-      (item.id.startsWith('wall_') ||
-        item.id.startsWith('door_') ||
-        item.id.startsWith('barricade_') ||
-        item.id.startsWith('border_')) &&
-      !item.id.includes('corner') &&
-      !item.id.includes('column') &&
-      !item.id.startsWith('floor_') &&
-      !item.id.startsWith('roof_');
+    return wallOffset(item, rotationIndex);
 
-    if (!isWall) {
-      return { x: 0, z: 0 };
-    }
-
-    const offsetDist = 0.40;
-    const rot = ((rotationIndex % 4) + 4) % 4;
-    if (rot === 0) return { x: offsetDist, z: 0 };
-    if (rot === 1) return { x: 0, z: offsetDist };
-    if (rot === 2) return { x: -offsetDist, z: 0 };
-    return { x: 0, z: -offsetDist };
   }
 
   public async setBuildItem(item?: BuildableItem) {
+    if (this.busy) return;
     if (!item) {
       if (this.isMovingItem) {
         this.cancelMove();
         return;
       }
       this.activeItem = undefined;
+      this.validationMessage = '';
+      this.previewError = '';
       this.ghostGroup.visible = false;
       this.footprintGroup.visible = false;
       this.clearGhostModel();
+      this.refreshLayout();
       return;
     }
 
@@ -154,6 +241,7 @@ export class PlacementSystem {
   }
 
   public rotate() {
+    if (this.busy) return;
     this.rotationIndex = (this.rotationIndex + 1) % 4;
     this.ghostGroup.rotation.y = this.rotationIndex * (Math.PI / 2);
 
@@ -172,6 +260,7 @@ export class PlacementSystem {
   }
 
   public updateHover(worldPos: THREE.Vector3) {
+    if (this.busy) return;
     const grid = this.gridSystem.worldToGrid(worldPos.x, worldPos.z);
     this.currentGridPos = grid;
 
@@ -195,12 +284,19 @@ export class PlacementSystem {
   private updateGhostValidity() {
     if (!this.activeItem) return;
 
-    const w = this.rotationIndex % 2 === 0 ? this.activeItem.width : this.activeItem.height;
-    const h = this.rotationIndex % 2 === 0 ? this.activeItem.height : this.activeItem.width;
-
-    const canPlace =
-      this.gridSystem.canOccupy(this.currentGridPos.x, this.currentGridPos.z, w, h) &&
-      (this.isMovingItem || this.economySystem.canAfford(this.activeItem.price));
+    const candidate = this.candidate()!;
+    const area = candidate.reserved;
+    const width = area.maxX - area.minX, depth = area.maxZ - area.minZ;
+    const previous = this.footprintGroup.userData.size;
+    if (previous !== `${width}:${depth}`) {
+      this.updateFootprintGeometry(width, depth);
+      this.footprintGroup.userData.size = `${width}:${depth}`;
+    }
+    this.footprintGroup.position.set((area.minX + area.maxX) / 2, .015, (area.minZ + area.maxZ) / 2);
+    this.validationMessage = this.previewError || this.validateGeometry(candidate) ||
+      (!this.isMovingItem && !this.economySystem.canAfford(this.activeItem.price) ? 'Not enough cash.' : '');
+    this.onValidationChanged?.(this.validationMessage);
+    const canPlace = !this.validationMessage;
 
     this.isGhostValid = canPlace;
 
@@ -319,36 +415,46 @@ export class PlacementSystem {
 
   private async updateGhostModel() {
     const currentToken = ++this.ghostLoadToken;
+    this.previewError = '';
     this.clearGhostModel();
 
     if (!this.activeItem) return;
 
     let model: THREE.Group | undefined;
 
-    if (this.activeItem.category === 'station') {
-      const station = new GamingStation('ghost_station', 0, 0, 0);
-      await station.build();
-      model = station.group;
-    } else if (this.activeItem.id.startsWith('reception')) {
-      const desk = new ReceptionDesk('ghost_reception', 0, 0, 0, 1);
-      await desk.build();
-      model = desk.group;
-    } else if (
-      this.activeItem.id.startsWith('sofa') ||
-      this.activeItem.id.startsWith('vending') ||
-      this.activeItem.id.startsWith('arcade')
-    ) {
-      const type: FacilityType = this.activeItem.id.startsWith('sofa')
-        ? 'sofa'
-        : this.activeItem.id.startsWith('vending')
-        ? 'vending'
-        : 'arcade';
-      const facility = new FacilityEntity('ghost_facility', type, 0, 0, 0, 1);
-      await facility.build();
-      model = facility.group;
-    } else {
-      const assetMgr = AssetManager.getInstance();
-      model = await assetMgr.loadModel(this.activeItem.modelPath);
+    try {
+      if (this.activeItem.category === 'station') {
+        const station = new GamingStation('ghost_station', 0, 0, 0);
+        await station.build();
+        model = station.group;
+      } else if (this.activeItem.id.startsWith('reception')) {
+        const desk = new ReceptionDesk('ghost_reception', 0, 0, 0, 1);
+        await desk.build();
+        model = desk.group;
+      } else if (
+        this.activeItem.id.startsWith('sofa') ||
+        this.activeItem.id.startsWith('vending') ||
+        this.activeItem.id.startsWith('arcade')
+      ) {
+        const type: FacilityType = this.activeItem.id.startsWith('sofa')
+          ? 'sofa'
+          : this.activeItem.id.startsWith('vending')
+          ? 'vending'
+          : 'arcade';
+        const facility = new FacilityEntity('ghost_facility', type, 0, 0, 0, 1);
+        await facility.build();
+        model = facility.group;
+      } else {
+        const assetMgr = AssetManager.getInstance();
+        model = await assetMgr.loadModel(this.activeItem.modelPath);
+      }
+    } catch (error) {
+      if (currentToken === this.ghostLoadToken && this.activeItem) {
+        this.validationMessage = error instanceof Error ? error.message : 'The preview could not be loaded. Please try again.';
+        this.previewError = this.validationMessage;
+        this.onValidationChanged?.(this.validationMessage);
+      }
+      return;
     }
 
     if (currentToken !== this.ghostLoadToken || !this.activeItem || !model) {
@@ -359,6 +465,8 @@ export class PlacementSystem {
     model.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
+        // Preview cleanup must never dispose geometry shared with real furniture or the model cache.
+        mesh.geometry = mesh.geometry.clone();
         if (mesh.geometry && mesh.geometry.type === 'RingGeometry') {
           mesh.visible = false;
         } else {
@@ -387,227 +495,99 @@ export class PlacementSystem {
   }
 
   public async tryPlace(): Promise<boolean> {
+    if (this.busy) return false;
+    this.busy = true;
+    try { return await this.placeCurrent(); }
+    catch (error) {
+      this.validationMessage = error instanceof Error ? error.message : 'The model could not be loaded. Please try again.';
+      this.onValidationChanged?.(this.validationMessage);
+      return false;
+    }
+    finally { this.busy = false; }
+  }
+
+  private async placeCurrent(): Promise<boolean> {
+    this.updateGhostValidity();
     if (!this.activeItem || !this.isGhostValid) return false;
-
-    // Moving an already placed item is FREE and preserves its upgraded entity state
-    if (this.isMovingItem && this.movingItemContext) {
-      const ctx = this.movingItemContext;
-      const w = this.rotationIndex % 2 === 0 ? ctx.item.width : ctx.item.height;
-      const h = this.rotationIndex % 2 === 0 ? ctx.item.height : ctx.item.width;
-      const posX = this.currentGridPos.x + w * 0.5;
-      const posZ = this.currentGridPos.z + h * 0.5;
-
-      if (ctx.type === 'station' && ctx.station) {
-        ctx.station.gridX = this.currentGridPos.x;
-        ctx.station.gridZ = this.currentGridPos.z;
-        ctx.station.rotationIndex = this.rotationIndex;
-        ctx.station.group.position.set(posX, 0, posZ);
-        ctx.station.group.rotation.y = this.rotationIndex * (Math.PI / 2);
-        ctx.station.group.visible = true;
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, ctx.station.id);
-      } else if (ctx.type === 'reception' && ctx.reception) {
-        ctx.reception.gridX = this.currentGridPos.x;
-        ctx.reception.gridZ = this.currentGridPos.z;
-        ctx.reception.rotationIndex = this.rotationIndex;
-        ctx.reception.group.position.set(posX, 0, posZ);
-        ctx.reception.group.rotation.y = this.rotationIndex * (Math.PI / 2);
-        ctx.reception.group.visible = true;
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, ctx.reception.id);
-        if (this.rotationIndex === 0) {
-          this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z - 1, w, 1, true, `${ctx.reception.id}_staff_zone`);
-        } else if (this.rotationIndex === 1) {
-          this.gridSystem.setOccupied(this.currentGridPos.x - 1, this.currentGridPos.z, 1, h, true, `${ctx.reception.id}_staff_zone`);
-        } else if (this.rotationIndex === 2) {
-          this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z + h, w, 1, true, `${ctx.reception.id}_staff_zone`);
-        } else {
-          this.gridSystem.setOccupied(this.currentGridPos.x + w, this.currentGridPos.z, 1, h, true, `${ctx.reception.id}_staff_zone`);
-        }
-        if (this.onReceptionMoved) {
-          this.onReceptionMoved(ctx.reception);
-        }
-      } else if (ctx.type === 'facility' && ctx.facility) {
-        ctx.facility.gridX = this.currentGridPos.x;
-        ctx.facility.gridZ = this.currentGridPos.z;
-        ctx.facility.rotationIndex = this.rotationIndex;
-        ctx.facility.group.position.set(posX, 0, posZ);
-        ctx.facility.group.rotation.y = this.rotationIndex * (Math.PI / 2);
-        ctx.facility.group.visible = true;
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, ctx.facility.id);
-      } else if (ctx.type === 'object' && ctx.object) {
-        const wallOffset = ctx.item ? this.getBuildingWallOffset(ctx.item, this.rotationIndex) : { x: 0, z: 0 };
-        ctx.object.position.set(posX + wallOffset.x, 0, posZ + wallOffset.z);
-        ctx.object.rotation.y = this.rotationIndex * (Math.PI / 2);
-        ctx.object.visible = true;
-        if (ctx.object.userData) {
-          ctx.object.userData.gridX = this.currentGridPos.x;
-          ctx.object.userData.gridZ = this.currentGridPos.z;
-          ctx.object.userData.rotationIndex = this.rotationIndex;
-          if (!ctx.object.userData.isWalkable) {
-            this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, ctx.object.uuid);
-          }
-        }
+    const item = this.activeItem, x = this.currentGridPos.x, z = this.currentGridPos.z, rotation = this.rotationIndex;
+    const geometry = this.candidate()!;
+    const { center } = geometry;
+    const ctx = this.movingItemContext;
+    if (ctx) {
+      const entity = ctx.station ?? ctx.reception ?? ctx.facility;
+      const group = entity?.group ?? ctx.object!;
+      if (entity) { entity.gridX = x; entity.gridZ = z; entity.rotationIndex = rotation; }
+      else {
+        Object.assign(group.userData, { gridX: x, gridZ: z, rotationIndex: rotation });
+        const box = geometry.solids[0];
+        if (box) Object.assign(group.userData, { halfW: (box.maxX - box.minX) / 2, halfD: (box.maxZ - box.minZ) / 2 });
       }
-
-      SoundManager.getInstance().playPlacement();
-      if (this.particleSystem) {
-        this.particleSystem.spawnBurst(new THREE.Vector3(posX, 0.4, posZ), 0x0284c7, 25);
-      }
-
+      const offset = ctx.object ? wallOffset(item, rotation) : { x: 0, z: 0 };
+      group.position.set(center.x + offset.x, 0, center.z + offset.z);
+      group.rotation.y = rotation * Math.PI / 2;
+      group.visible = true;
+      this.reserve(item, x, z, rotation, this.movingId()!);
       this.isMovingItem = false;
       this.movingItemContext = undefined;
       this.activeItem = undefined;
       this.clearGhostModel();
-      this.ghostGroup.visible = false;
-      this.footprintGroup.visible = false;
+      this.ghostGroup.visible = this.footprintGroup.visible = false;
+      this.refreshLayout();
+      if (ctx.reception) this.onReceptionMoved?.(ctx.reception);
       this.onMoveModeChanged?.(false);
-      return true;
-    }
-
-    if (!this.economySystem.spend(this.activeItem.price)) return false;
-
-    const w = this.rotationIndex % 2 === 0 ? this.activeItem.width : this.activeItem.height;
-    const h = this.rotationIndex % 2 === 0 ? this.activeItem.height : this.activeItem.width;
-    const id = `item_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-    const posX = this.currentGridPos.x + w * 0.5;
-    const posZ = this.currentGridPos.z + h * 0.5;
-
-    if (this.activeItem.category === 'station') {
-      const station = new GamingStation(id, this.currentGridPos.x, this.currentGridPos.z, this.rotationIndex);
-      await station.build();
-      station.group.position.set(posX, 0, posZ);
-      this.scene.add(station.group);
-      this.stations.set(id, station);
-
-      this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, id);
-    } else if (this.activeItem.id.startsWith('reception')) {
-      const desk = new ReceptionDesk(id, this.currentGridPos.x, this.currentGridPos.z, this.rotationIndex, 1);
-      await desk.build();
-      desk.group.position.set(posX, 0, posZ);
-      this.scene.add(desk.group);
-      this.receptionDesks.set(id, desk);
-
-      if (this.onReceptionPlaced) {
-        this.onReceptionPlaced(desk);
-      }
-
-      this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, id);
-      // Staff-only barrier behind counter: prevents customers from routing behind the desk
-      if (this.rotationIndex === 0) {
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z - 1, w, 1, true, `${id}_staff_zone`);
-      } else if (this.rotationIndex === 1) {
-        this.gridSystem.setOccupied(this.currentGridPos.x - 1, this.currentGridPos.z, 1, h, true, `${id}_staff_zone`);
-      } else if (this.rotationIndex === 2) {
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z + h, w, 1, true, `${id}_staff_zone`);
-      } else {
-        this.gridSystem.setOccupied(this.currentGridPos.x + w, this.currentGridPos.z, 1, h, true, `${id}_staff_zone`);
-      }
-    } else if (
-      this.activeItem.id.startsWith('sofa') ||
-      this.activeItem.id.startsWith('vending') ||
-      this.activeItem.id.startsWith('arcade')
-    ) {
-      const type: FacilityType = this.activeItem.id.startsWith('sofa')
-        ? 'sofa'
-        : this.activeItem.id.startsWith('vending')
-        ? 'vending'
-        : 'arcade';
-      const facility = new FacilityEntity(
-        id,
-        type,
-        this.currentGridPos.x,
-        this.currentGridPos.z,
-        this.rotationIndex,
-        1
-      );
-      await facility.build();
-      facility.group.position.set(posX, 0, posZ);
-      this.scene.add(facility.group);
-      this.facilities.set(id, facility);
-
-      this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, id);
-    } else if (this.activeItem.category === 'building') {
-      const assetMgr = AssetManager.getInstance();
-      const model = await assetMgr.loadModel(this.activeItem.modelPath);
-      const wallOffset = this.getBuildingWallOffset(this.activeItem, this.rotationIndex);
-      model.position.set(posX + wallOffset.x, 0, posZ + wallOffset.z);
-      model.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-      // Handle window glass transparency
-      model.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          for (const m of mats) {
-            if (m && m.name === 'glass') {
-              m.transparent = true;
-              m.opacity = 0.35;
-              m.depthWrite = false;
-            }
-          }
-        }
-      });
-
-      const isFloor = this.activeItem.id.startsWith('floor_');
-      const isDoorway = this.activeItem.id.includes('doorway');
-      const isWall =
-        wallOffset.x !== 0 ||
-        wallOffset.z !== 0 ||
-        this.activeItem.id.startsWith('wall_') ||
-        this.activeItem.id.startsWith('door_');
-
-      const halfW = isWall ? (this.rotationIndex % 2 === 0 ? 0.15 : w * 0.48) : w * 0.48;
-      const halfD = isWall ? (this.rotationIndex % 2 === 0 ? h * 0.48 : 0.15) : h * 0.48;
-
-      model.userData = {
-        isBuildingItem: true,
-        item: this.activeItem,
-        gridX: this.currentGridPos.x,
-        gridZ: this.currentGridPos.z,
-        rotationIndex: this.rotationIndex,
-        isWalkable: isFloor || isDoorway,
-        halfW,
-        halfD
-      };
-
-      this.scene.add(model);
-      this.buildingObjects.push(model);
-
-      // Floors and open doorways don't block walking; solid walls/windows/columns do!
-      if (!isFloor && !isDoorway) {
-        this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, id);
-      }
     } else {
-      const assetMgr = AssetManager.getInstance();
-      const model = await assetMgr.loadModel(this.activeItem.modelPath);
-      model.position.set(posX, 0, posZ);
-      model.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-      model.userData = {
-        isDecor: true,
-        item: this.activeItem,
-        gridX: this.currentGridPos.x,
-        gridZ: this.currentGridPos.z,
-        rotationIndex: this.rotationIndex
-      };
-
-      this.scene.add(model);
-      this.decorObjects.push(model);
-
-      this.gridSystem.setOccupied(this.currentGridPos.x, this.currentGridPos.z, w, h, true, id);
+      const id = `item_${crypto.randomUUID()}`;
+      let group: THREE.Group;
+      let station: GamingStation | undefined, desk: ReceptionDesk | undefined, facility: FacilityEntity | undefined;
+      if (item.category === 'station') {
+        station = new GamingStation(id, x, z, rotation);
+        await station.build();
+        group = station.group;
+      } else if (item.id.startsWith('reception')) {
+        desk = new ReceptionDesk(id, x, z, rotation);
+        await desk.build(); group = desk.group;
+      } else if (['sofa', 'vending', 'arcade'].some((type) => item.id.startsWith(type))) {
+        const type = ['sofa', 'vending', 'arcade'].find((type) => item.id.startsWith(type)) as FacilityType;
+        facility = new FacilityEntity(id, type, x, z, rotation);
+        await facility.build(); group = facility.group;
+      } else {
+        group = await AssetManager.getInstance().loadRequiredModel(item.modelPath);
+        const building = item.category === 'building';
+        const box = geometry.solids[0];
+        Object.assign(group.userData, { item, persistentId: id, gridX: x, gridZ: z, rotationIndex: rotation,
+          isBuildingItem: building, isDecor: !building, isWalkable: !geometry.solids.length,
+          halfW: box ? (box.maxX - box.minX) / 2 : 0, halfD: box ? (box.maxZ - box.minZ) / 2 : 0 });
+        if (building) group.traverse((child) => {
+          if (!(child as THREE.Mesh).isMesh) return;
+          const material = (child as THREE.Mesh).material;
+          for (const mat of Array.isArray(material) ? material : [material]) if (mat.name === 'glass') {
+            mat.transparent = true; mat.opacity = .35; mat.depthWrite = false;
+          }
+        });
+      }
+      // Cash and entity become visible in the same synchronous commit after loading.
+      const error = this.validateGeometry(geometry);
+      if (error || !this.economySystem.spend(item.price)) {
+        this.validationMessage = error || 'Not enough cash.';
+        this.onValidationChanged?.(this.validationMessage);
+        return false;
+      }
+      const offset = !station && !desk && !facility ? wallOffset(item, rotation) : { x: 0, z: 0 };
+      group.position.set(center.x + offset.x, 0, center.z + offset.z);
+      group.rotation.y = rotation * Math.PI / 2;
+      this.scene.add(group);
+      if (station) { this.configureStation(station); this.stations.set(id, station); }
+      else if (desk) this.receptionDesks.set(id, desk);
+      else if (facility) this.facilities.set(id, facility);
+      else (item.category === 'building' ? this.buildingObjects : this.decorObjects).push(group);
+      this.reserve(item, x, z, rotation, id);
+      if (item.reputationBonus) this.economySystem.addReputation(item.reputationBonus);
+      this.refreshLayout();
+      if (desk) this.onReceptionPlaced?.(desk);
+      this.updateGhostValidity();
     }
-
-    // Audio & Visual Placement Feedback
     SoundManager.getInstance().playPlacement();
-    if (this.particleSystem) {
-      this.particleSystem.spawnBurst(new THREE.Vector3(posX, 0.4, posZ), 0x0d9488, 25);
-    }
-
-    if (this.activeItem.reputationBonus) {
-      this.economySystem.addReputation(this.activeItem.reputationBonus);
-    }
-
-    this.updateGhostValidity();
+    this.particleSystem?.spawnBurst(new THREE.Vector3(center.x, .4, center.z), 0x0d9488, 25);
     return true;
   }
 
@@ -680,6 +660,77 @@ export class PlacementSystem {
     }
   }
 
+  public getPickTargets(): THREE.Object3D[] {
+    return [...this.stations.values()].map((station) => station.group)
+      .concat([...this.receptionDesks.values()].map((desk) => desk.group),
+        [...this.facilities.values()].map((facility) => facility.group), this.decorObjects, this.buildingObjects)
+      .filter((group) => group.visible);
+  }
+
+  /** Recreate persistent entities directly: restoring never spends cash or grants bonuses. */
+  public async restore(saved: GameSaveState): Promise<void> {
+    const place = (group: THREE.Group, entry: { id: string; gridX: number; gridZ: number; rotationIndex: number }, item: BuildableItem, block = true) => {
+      const w = entry.rotationIndex % 2 === 0 ? item.width : item.height;
+      const h = entry.rotationIndex % 2 === 0 ? item.height : item.width;
+      group.position.set(entry.gridX + w / 2, 0, entry.gridZ + h / 2);
+      group.rotation.y = entry.rotationIndex * Math.PI / 2;
+      this.scene.add(group);
+      if (block) this.reserve(item, entry.gridX, entry.gridZ, entry.rotationIndex, entry.id);
+      return { w, h };
+    };
+    const stationItem = BUILDABLE_ITEMS.find((item) => item.id === 'station_bundle')!;
+    for (const entry of saved.stations) {
+      const station = new GamingStation(entry.id, entry.gridX, entry.gridZ, entry.rotationIndex);
+      await station.loadTiers(entry.pcLevel, entry.chairLevel, entry.monitorLevel, entry.deskLevel,
+        entry.keyboardLevel, entry.mouseLevel, entry.speakerLevel);
+      place(station.group, entry, stationItem);
+      this.configureStation(station);
+      this.stations.set(entry.id, station);
+    }
+    // Version 1 did not serialize reception desks; preserve the original starter counter.
+    const desks = saved.receptions ?? [{ id: 'legacy_reception', gridX: -2, gridZ: 2, rotationIndex: 0, level: saved.receptionLevel ?? 1 }];
+    const receptionItem = BUILDABLE_ITEMS.find((item) => item.id === 'reception_counter')!;
+    for (const entry of desks) {
+      const desk = new ReceptionDesk(entry.id, entry.gridX, entry.gridZ, entry.rotationIndex, entry.level);
+      await desk.build();
+      place(desk.group, entry, receptionItem);
+      this.receptionDesks.set(entry.id, desk);
+
+    }
+    for (const entry of saved.facilities) {
+      const type = entry.itemId as FacilityType;
+      const facility = new FacilityEntity(entry.id, type, entry.gridX, entry.gridZ, entry.rotationIndex, entry.level ?? 1);
+      await facility.build();
+      const item = BUILDABLE_ITEMS.find((candidate) => candidate.id.startsWith(type))!;
+      place(facility.group, entry, item);
+      this.facilities.set(entry.id, facility);
+    }
+    for (const entry of saved.objects ?? []) {
+      const item = BUILDABLE_ITEMS.find((candidate) => candidate.id === entry.itemId);
+      if (!item) throw new Error(`Saved building item ${entry.itemId} is not in the catalog.`);
+      const model = await AssetManager.getInstance().loadModel(item.modelPath);
+      const offset = this.getBuildingWallOffset(item, entry.rotationIndex);
+      const building = item.category === 'building';
+      if (building) model.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return;
+        const mesh = child as THREE.Mesh;
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (material.name === 'glass') { material.transparent = true; material.opacity = 0.35; material.depthWrite = false; }
+        }
+      });
+      const walkable = building && (item.id.startsWith('floor_') || item.id.includes('doorway'));
+      const { w, h } = place(model, entry, item, !walkable);
+      model.position.x += offset.x; model.position.z += offset.z;
+      const wall = offset.x !== 0 || offset.z !== 0 || item.id.startsWith('wall_') || item.id.startsWith('door_');
+      model.userData = { ...model.userData, item, persistentId: entry.id, gridX: entry.gridX, gridZ: entry.gridZ,
+        rotationIndex: entry.rotationIndex, isBuildingItem: building, isDecor: !building, isWalkable: walkable,
+        halfW: wall ? (entry.rotationIndex % 2 === 0 ? 0.15 : w * 0.48) : w * 0.48,
+        halfD: wall ? (entry.rotationIndex % 2 === 0 ? h * 0.48 : 0.15) : h * 0.48 };
+      (building ? this.buildingObjects : this.decorObjects).push(model);
+    }
+    this.refreshLayout();
+  }
+
   public deselectAll() {
     if (this.selectedStation) {
       this.selectedStation.setSelected(false);
@@ -706,20 +757,23 @@ export class PlacementSystem {
   }
 
   public moveSelectedItem(): boolean {
-    if (this.isMovingItem || this.activeItem) return false;
+    if (this.busy || this.isMovingItem || this.activeItem) return false;
 
     if (this.selectedStation) {
       const station = this.selectedStation;
+      if (station.isOccupied || station.currentGamerId || station.isUpgrading) return false;
       this.startMoveStation(station);
       return true;
     }
     if (this.selectedReception) {
       const desk = this.selectedReception;
+      if (desk.isUpgrading) return false;
       this.startMoveReception(desk);
       return true;
     }
     if (this.selectedFacility) {
       const facility = this.selectedFacility;
+      if (facility.isUpgrading) return false;
       this.startMoveFacility(facility);
       return true;
     }
@@ -731,320 +785,69 @@ export class PlacementSystem {
     return false;
   }
 
-  public async startMoveStation(station: GamingStation) {
-    this.deselectAll();
-    const item = BUILDABLE_ITEMS.find((i) => i.category === 'station') || {
-      id: 'station_pc',
-      name: 'Gaming Station',
-      category: 'station',
-      price: 0,
-      width: 2,
-      height: 2,
-      modelPath: ''
-    };
-
-    const w = station.rotationIndex % 2 === 0 ? item.width : item.height;
-    const h = station.rotationIndex % 2 === 0 ? item.height : item.width;
-
-    // Free original grid occupancy
-    this.gridSystem.setOccupied(station.gridX, station.gridZ, w, h, false);
-
-    this.movingItemContext = {
-      type: 'station',
-      station,
-      item: item as BuildableItem,
-      originalGridX: station.gridX,
-      originalGridZ: station.gridZ,
-      originalRotationIndex: station.rotationIndex
-    };
-    this.isMovingItem = true;
-    station.group.visible = false;
-
-    this.activeItem = item as BuildableItem;
-    this.rotationIndex = station.rotationIndex;
-    this.ghostGroup.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-    const curW = this.rotationIndex % 2 === 0 ? item.width : item.height;
-    const curH = this.rotationIndex % 2 === 0 ? item.height : item.width;
-    this.updateFootprintGeometry(curW, curH);
-
-    this.currentGridPos = { x: station.gridX, z: station.gridZ };
-    const posX = station.gridX + curW * 0.5;
-    const posZ = station.gridZ + curH * 0.5;
-    this.ghostGroup.position.set(posX, 0, posZ);
-    this.footprintGroup.position.set(posX, 0.015, posZ);
-
-    await this.updateGhostModel();
-    this.updateGhostValidity();
-    this.ghostGroup.visible = true;
-    this.footprintGroup.visible = true;
-    this.onMoveModeChanged?.(true);
+  public async startMoveStation(station: GamingStation): Promise<void> {
+    if (station.isOccupied || station.currentGamerId || station.isUpgrading) return;
+    await this.startMove({ type: 'station', station, item: BUILDABLE_ITEMS.find((item) => item.category === 'station')!,
+      originalGridX: station.gridX, originalGridZ: station.gridZ, originalRotationIndex: station.rotationIndex });
   }
 
-  public async startMoveReception(desk: ReceptionDesk) {
-    this.deselectAll();
-    const item = BUILDABLE_ITEMS.find((i) => i.id.startsWith('reception')) || {
-      id: 'reception_counter',
-      name: 'Reception Desk',
-      category: 'facility',
-      price: 0,
-      width: 4,
-      height: 3,
-      modelPath: desk.currentTier.model
-    };
-
-    const w = desk.rotationIndex % 2 === 0 ? item.width : item.height;
-    const h = desk.rotationIndex % 2 === 0 ? item.height : item.width;
-
-    // Free original grid occupancy + staff barrier
-    this.gridSystem.setOccupied(desk.gridX, desk.gridZ, w, h, false);
-    if (desk.rotationIndex === 0) {
-      this.gridSystem.setOccupied(desk.gridX, desk.gridZ - 1, w, 1, false);
-    } else if (desk.rotationIndex === 1) {
-      this.gridSystem.setOccupied(desk.gridX - 1, desk.gridZ, 1, h, false);
-    } else if (desk.rotationIndex === 2) {
-      this.gridSystem.setOccupied(desk.gridX, desk.gridZ + h, w, 1, false);
-    } else {
-      this.gridSystem.setOccupied(desk.gridX + w, desk.gridZ, 1, h, false);
-    }
-
-    this.movingItemContext = {
-      type: 'reception',
-      reception: desk,
-      item: item as BuildableItem,
-      originalGridX: desk.gridX,
-      originalGridZ: desk.gridZ,
-      originalRotationIndex: desk.rotationIndex
-    };
-    this.isMovingItem = true;
-    desk.group.visible = false;
-
-    this.activeItem = item as BuildableItem;
-    this.rotationIndex = desk.rotationIndex;
-    this.ghostGroup.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-    const curW = this.rotationIndex % 2 === 0 ? item.width : item.height;
-    const curH = this.rotationIndex % 2 === 0 ? item.height : item.width;
-    this.updateFootprintGeometry(curW, curH);
-
-    this.currentGridPos = { x: desk.gridX, z: desk.gridZ };
-    const posX = desk.gridX + curW * 0.5;
-    const posZ = desk.gridZ + curH * 0.5;
-    this.ghostGroup.position.set(posX, 0, posZ);
-    this.footprintGroup.position.set(posX, 0.015, posZ);
-
-    await this.updateGhostModel();
-    this.updateGhostValidity();
-    this.ghostGroup.visible = true;
-    this.footprintGroup.visible = true;
-    this.onMoveModeChanged?.(true);
+  public async startMoveReception(desk: ReceptionDesk): Promise<void> {
+    if (desk.isUpgrading) return;
+    await this.startMove({ type: 'reception', reception: desk, item: BUILDABLE_ITEMS.find((item) => item.id.startsWith('reception'))!,
+      originalGridX: desk.gridX, originalGridZ: desk.gridZ, originalRotationIndex: desk.rotationIndex });
   }
 
-  public async startMoveFacility(facility: FacilityEntity) {
-    this.deselectAll();
-    const item = BUILDABLE_ITEMS.find((i) => i.id.startsWith(facility.type)) || {
-      id: facility.type,
-      name: facility.type.toUpperCase(),
-      category: 'facility',
-      price: 0,
-      width: facility.type === 'sofa' ? 3 : 1,
-      height: facility.type === 'sofa' ? 2 : 1,
-      modelPath: facility.currentTier.model
-    };
-
-    const w = facility.rotationIndex % 2 === 0 ? item.width : item.height;
-    const h = facility.rotationIndex % 2 === 0 ? item.height : item.width;
-
-    // Free original grid occupancy
-    this.gridSystem.setOccupied(facility.gridX, facility.gridZ, w, h, false);
-
-    this.movingItemContext = {
-      type: 'facility',
-      facility,
-      item: item as BuildableItem,
-      originalGridX: facility.gridX,
-      originalGridZ: facility.gridZ,
-      originalRotationIndex: facility.rotationIndex
-    };
-    this.isMovingItem = true;
-    facility.group.visible = false;
-
-    this.activeItem = item as BuildableItem;
-    this.rotationIndex = facility.rotationIndex;
-    this.ghostGroup.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-    const curW = this.rotationIndex % 2 === 0 ? item.width : item.height;
-    const curH = this.rotationIndex % 2 === 0 ? item.height : item.width;
-    this.updateFootprintGeometry(curW, curH);
-
-    this.currentGridPos = { x: facility.gridX, z: facility.gridZ };
-    const posX = facility.gridX + curW * 0.5;
-    const posZ = facility.gridZ + curH * 0.5;
-    this.ghostGroup.position.set(posX, 0, posZ);
-    this.footprintGroup.position.set(posX, 0.015, posZ);
-
-    await this.updateGhostModel();
-    this.updateGhostValidity();
-    this.ghostGroup.visible = true;
-    this.footprintGroup.visible = true;
-    this.onMoveModeChanged?.(true);
+  public async startMoveFacility(facility: FacilityEntity): Promise<void> {
+    if (facility.isUpgrading) return;
+    await this.startMove({ type: 'facility', facility, item: BUILDABLE_ITEMS.find((item) => item.id.startsWith(facility.type))!,
+      originalGridX: facility.gridX, originalGridZ: facility.gridZ, originalRotationIndex: facility.rotationIndex });
   }
 
-  public async startMoveObject(obj: THREE.Object3D) {
-    this.deselectAll();
-    const item: BuildableItem = obj.userData?.item || {
-      id: 'generic_decor',
-      name: 'Decor Item',
-      category: 'decor',
-      price: 0,
-      width: 1,
-      height: 1,
-      modelPath: ''
-    };
-
-    const origGridX = obj.userData?.gridX ?? Math.floor(obj.position.x);
-    const origGridZ = obj.userData?.gridZ ?? Math.floor(obj.position.z);
-    const origRot = obj.userData?.rotationIndex ?? Math.round(obj.rotation.y / (Math.PI / 2));
-
-    const w = origRot % 2 === 0 ? item.width : item.height;
-    const h = origRot % 2 === 0 ? item.height : item.width;
-
-    if (!obj.userData?.isWalkable) {
-      this.gridSystem.setOccupied(origGridX, origGridZ, w, h, false);
-    }
-
-    this.movingItemContext = {
-      type: 'object',
-      object: obj,
-      item,
-      originalGridX: origGridX,
-      originalGridZ: origGridZ,
-      originalRotationIndex: origRot
-    };
-    this.isMovingItem = true;
-    obj.visible = false;
-
-    this.activeItem = item;
-    this.rotationIndex = origRot;
-    this.ghostGroup.rotation.y = this.rotationIndex * (Math.PI / 2);
-
-    const curW = this.rotationIndex % 2 === 0 ? item.width : item.height;
-    const curH = this.rotationIndex % 2 === 0 ? item.height : item.width;
-    this.updateFootprintGeometry(curW, curH);
-
-    this.currentGridPos = { x: origGridX, z: origGridZ };
-    const posX = origGridX + curW * 0.5;
-    const posZ = origGridZ + curH * 0.5;
-    const wallOffset = this.getBuildingWallOffset(item, this.rotationIndex);
-    this.ghostGroup.position.set(posX + wallOffset.x, 0, posZ + wallOffset.z);
-    this.footprintGroup.position.set(posX, 0.015, posZ);
-
-    await this.updateGhostModel();
-    this.updateGhostValidity();
-    this.ghostGroup.visible = true;
-    this.footprintGroup.visible = true;
-    this.onMoveModeChanged?.(true);
+  public async startMoveObject(object: THREE.Object3D): Promise<void> {
+    if (!object.userData.item) return;
+    await this.startMove({ type: 'object', object, item: object.userData.item,
+      originalGridX: object.userData.gridX, originalGridZ: object.userData.gridZ, originalRotationIndex: object.userData.rotationIndex ?? 0 });
   }
 
-  public cancelMove() {
-    if (!this.isMovingItem || !this.movingItemContext) return;
+  private async startMove(context: MovingItemContext): Promise<void> {
+    if (this.busy || this.isMovingItem || this.activeItem) return;
+    this.deselectAll();
+    this.movingItemContext = context;
+    this.gridSystem.releaseOwner(this.movingId()!);
+    this.isMovingItem = true;
+    (context.station?.group ?? context.reception?.group ?? context.facility?.group ?? context.object!).visible = false;
+    this.activeItem = context.item;
+    this.rotationIndex = context.originalRotationIndex;
+    this.currentGridPos = { x: context.originalGridX, z: context.originalGridZ };
+    this.ghostGroup.rotation.y = this.rotationIndex * Math.PI / 2;
+    this.updateHover(new THREE.Vector3(context.originalGridX, 0, context.originalGridZ));
+    this.refreshLayout();
+    this.onMoveModeChanged?.(true);
+    await this.updateGhostModel();
+    if (!this.isMovingItem) return;
+    this.updateGhostValidity();
+    this.ghostGroup.visible = this.footprintGroup.visible = true;
+  }
+
+  public cancelMove(): void {
+    if (this.busy || !this.movingItemContext) return;
     const ctx = this.movingItemContext;
-    const origW = ctx.originalRotationIndex % 2 === 0 ? ctx.item.width : ctx.item.height;
-    const origH = ctx.originalRotationIndex % 2 === 0 ? ctx.item.height : ctx.item.width;
-
-    if (ctx.type === 'station' && ctx.station) {
-      ctx.station.group.visible = true;
-      this.gridSystem.setOccupied(
-        ctx.originalGridX,
-        ctx.originalGridZ,
-        origW,
-        origH,
-        true,
-        ctx.station.id
-      );
-    } else if (ctx.type === 'reception' && ctx.reception) {
-      ctx.reception.group.visible = true;
-      this.gridSystem.setOccupied(
-        ctx.originalGridX,
-        ctx.originalGridZ,
-        origW,
-        origH,
-        true,
-        ctx.reception.id
-      );
-      if (ctx.originalRotationIndex === 0) {
-        this.gridSystem.setOccupied(
-          ctx.originalGridX,
-          ctx.originalGridZ - 1,
-          origW,
-          1,
-          true,
-          `${ctx.reception.id}_staff_zone`
-        );
-      } else if (ctx.originalRotationIndex === 1) {
-        this.gridSystem.setOccupied(
-          ctx.originalGridX - 1,
-          ctx.originalGridZ,
-          1,
-          origH,
-          true,
-          `${ctx.reception.id}_staff_zone`
-        );
-      } else if (ctx.originalRotationIndex === 2) {
-        this.gridSystem.setOccupied(
-          ctx.originalGridX,
-          ctx.originalGridZ + origH,
-          origW,
-          1,
-          true,
-          `${ctx.reception.id}_staff_zone`
-        );
-      } else {
-        this.gridSystem.setOccupied(
-          ctx.originalGridX + origW,
-          ctx.originalGridZ,
-          1,
-          origH,
-          true,
-          `${ctx.reception.id}_staff_zone`
-        );
-      }
-    } else if (ctx.type === 'facility' && ctx.facility) {
-      ctx.facility.group.visible = true;
-      this.gridSystem.setOccupied(
-        ctx.originalGridX,
-        ctx.originalGridZ,
-        origW,
-        origH,
-        true,
-        ctx.facility.id
-      );
-    } else if (ctx.type === 'object' && ctx.object) {
-      ctx.object.visible = true;
-      if (!ctx.object.userData?.isWalkable) {
-        this.gridSystem.setOccupied(
-          ctx.originalGridX,
-          ctx.originalGridZ,
-          origW,
-          origH,
-          true,
-          ctx.object.uuid
-        );
-      }
-    }
-
+    const group = ctx.station?.group ?? ctx.reception?.group ?? ctx.facility?.group ?? ctx.object!;
+    group.visible = true;
+    this.reserve(ctx.item, ctx.originalGridX, ctx.originalGridZ, ctx.originalRotationIndex, this.movingId()!);
     this.isMovingItem = false;
     this.movingItemContext = undefined;
     this.activeItem = undefined;
     this.clearGhostModel();
-    this.ghostGroup.visible = false;
-    this.footprintGroup.visible = false;
+    this.ghostGroup.visible = this.footprintGroup.visible = false;
+    this.refreshLayout();
+    if (ctx.reception) this.onReceptionMoved?.(ctx.reception);
     this.onMoveModeChanged?.(false);
   }
 
   public getAvailableStation(): GamingStation | null {
     for (const station of this.stations.values()) {
-      if (!station.isOccupied) {
+      if (station.group.visible && !station.isUpgrading && !station.accessIssue && !station.isOccupied) {
         return station;
       }
     }

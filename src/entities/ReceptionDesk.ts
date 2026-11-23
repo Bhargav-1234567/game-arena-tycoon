@@ -9,6 +9,7 @@ export interface ReceptionTier {
   desktopItems: string;
   perkDescription: string;
   reputationBonus: number;
+  checkInMultiplier: number;
 }
 
 export const RECEPTION_TIERS: ReceptionTier[] = [
@@ -19,7 +20,8 @@ export const RECEPTION_TIERS: ReceptionTier[] = [
     model: '/assets/models/furniture/counters/reception_lvl1.glb',
     desktopItems: 'Guest Sign-in Book (lvl 1), Welcome Nameplate (lvl 1.1) & Pen Mug (lvl 1.2)',
     perkDescription: 'Starter check-in counter for greeting visitors.',
-    reputationBonus: 10
+    reputationBonus: 10,
+    checkInMultiplier: 1
   },
   {
     level: 2,
@@ -28,7 +30,8 @@ export const RECEPTION_TIERS: ReceptionTier[] = [
     model: '/assets/models/furniture/counters/reception_lvl2.glb',
     desktopItems: 'Intercom Desk Phone with Handset (lvl 2.1) & Filing Organizer (lvl 2)',
     perkDescription: 'Speeds up customer check-in throughput by +25%.',
-    reputationBonus: 20
+    reputationBonus: 20,
+    checkInMultiplier: 1.25
   },
   {
     level: 3,
@@ -37,7 +40,8 @@ export const RECEPTION_TIERS: ReceptionTier[] = [
     model: '/assets/models/furniture/counters/reception_lvl3.glb',
     desktopItems: 'Staff Laptop (lvl 3.1), Customer Card Scanner (lvl 3) & Accessory Tray (lvl 3.2)',
     perkDescription: 'Digital check-in reduces queue wait times by +50%.',
-    reputationBonus: 35
+    reputationBonus: 35,
+    checkInMultiplier: 1.5
   },
   {
     level: 4,
@@ -45,8 +49,9 @@ export const RECEPTION_TIERS: ReceptionTier[] = [
     price: 2400,
     model: '/assets/models/furniture/counters/reception_lvl4.glb',
     desktopItems: 'Touchscreen POS Machine & Cash Drawer (lvl 4), Thermal Receipt Printer (lvl 4.1)',
-    perkDescription: 'Automated ticketing and POS cashier terminal. Maximum prestige!',
-    reputationBonus: 60
+    perkDescription: 'Automated ticketing: +75% check-in throughput. Maximum prestige!',
+    reputationBonus: 60,
+    checkInMultiplier: 1.75
   }
 ];
 
@@ -61,6 +66,7 @@ export class ReceptionDesk {
   private mesh?: THREE.Group;
   private selectionRing?: THREE.Mesh;
   public isSelected: boolean = false;
+  public isUpgrading = false;
 
   constructor(
     id: string,
@@ -89,7 +95,7 @@ export class ReceptionDesk {
 
   public async build() {
     const assetMgr = AssetManager.getInstance();
-    this.mesh = await assetMgr.loadModel(this.currentTier.model);
+    this.mesh = await assetMgr.loadRequiredModel(this.currentTier.model);
     this.alignMesh(this.mesh);
     this.group.add(this.mesh);
 
@@ -115,15 +121,18 @@ export class ReceptionDesk {
     }
   }
 
-  public async upgrade(nextTier: ReceptionTier) {
-    this.currentTier = nextTier;
-    if (this.mesh) {
-      this.group.remove(this.mesh);
-    }
-    const assetMgr = AssetManager.getInstance();
-    this.mesh = await assetMgr.loadModel(nextTier.model);
-    this.alignMesh(this.mesh);
-    this.group.add(this.mesh);
+  public async upgrade(nextTier: ReceptionTier, beforeCommit: () => boolean = () => true): Promise<void> {
+    if (this.isUpgrading || !this.group.visible || nextTier.level !== this.currentTier.level + 1) throw new Error('This upgrade is no longer available.');
+    this.isUpgrading = true;
+    try {
+      const model = await AssetManager.getInstance().loadRequiredModel(nextTier.model);
+      this.alignMesh(model);
+      if (!beforeCommit()) throw new Error('Not enough cash.');
+      if (this.mesh) this.group.remove(this.mesh);
+      this.currentTier = nextTier;
+      this.mesh = model;
+      this.group.add(model);
+    } finally { this.isUpgrading = false; }
   }
 
   public getStaffPosition(): THREE.Vector3 {

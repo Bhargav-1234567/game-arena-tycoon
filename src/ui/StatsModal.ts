@@ -1,10 +1,11 @@
 import { EconomySystem } from '../systems/EconomySystem.ts';
 import { StaffSystem } from '../systems/StaffSystem.ts';
 import { PlacementSystem } from '../systems/PlacementSystem.ts';
-import { SaveManager, GameSaveState } from '../services/SaveManager.ts';
+import { SaveManager } from '../services/SaveManager.ts';
 import { SoundManager } from '../services/SoundManager.ts';
 
 export class StatsModal {
+  public onSave?: () => boolean;
   private element: HTMLElement;
   private economy: EconomySystem;
   private staff: StaffSystem;
@@ -173,46 +174,10 @@ export class StatsModal {
 
     // Save Game Progress
     this.element.querySelector('#save-game-btn')?.addEventListener('click', () => {
-      const state: GameSaveState = {
-        version: 1,
-        timestamp: Date.now(),
-        economy: {
-          cash: this.economy.cash,
-          reputation: this.economy.reputation,
-          day: this.economy.day,
-          timeMinutes: this.economy.timeMinutes
-        },
-        stations: Array.from(this.placement.stations.values()).map((s) => ({
-          id: s.id,
-          gridX: s.gridX,
-          gridZ: s.gridZ,
-          rotationIndex: s.rotationIndex,
-          pcLevel: s.currentPC.level,
-          chairLevel: s.currentChair.level,
-          monitorLevel: s.currentMonitor.level,
-          deskLevel: s.currentDesk.level,
-          keyboardLevel: s.currentKeyboard.level,
-          mouseLevel: s.currentMouse.level,
-          speakerLevel: s.currentSpeaker.level
-        })),
-        facilities: Array.from(this.placement.facilities.values()).map((f) => ({
-          id: f.id,
-          itemId: f.type,
-          gridX: f.gridX,
-          gridZ: f.gridZ,
-          rotationIndex: f.rotationIndex,
-          level: f.currentTier.level
-        })),
-        staff: this.staff.roles.map((r) => ({
-          id: r.id,
-          hiredCount: r.hiredCount
-        }))
-      };
-
-      if (SaveManager.getInstance().save(state)) {
+      if (this.onSave?.()) {
         SoundManager.getInstance().playUpgrade();
-        alert('Game progress saved successfully! All station tiers, staff, and balance are preserved.');
-      }
+        alert('Lounge, parts, diamonds and puzzle progress saved successfully!');
+      } else alert('Could not save. Finish placing or moving your item, check browser storage, and try again.');
     });
 
     // Reset Game Progress

@@ -3,6 +3,11 @@ import { PlacementSystem } from '../systems/PlacementSystem.ts';
 import { EconomySystem } from '../systems/EconomySystem.ts';
 
 export class BuildMenu {
+  public hide(): void {
+    const panel = this.element.querySelector<HTMLElement>('#build-panel');
+    if (panel) panel.style.display = 'none';
+    this.showBuildControls(false);
+  }
   private element: HTMLElement;
   private placementSystem: PlacementSystem;
   private economySystem: EconomySystem;
@@ -20,6 +25,11 @@ export class BuildMenu {
     parent.appendChild(this.element);
 
     this.setupListeners();
+    placementSystem.onValidationChanged = (message) => {
+      const status = this.element.querySelector<HTMLElement>('#placement-status')!;
+      status.textContent = message;
+      status.hidden = !message;
+    };
   }
 
   private render() {
@@ -39,6 +49,7 @@ export class BuildMenu {
         </button>
       </div>
 
+      <p id="placement-status" class="placement-status" role="status" hidden></p>
       <div id="build-panel" class="build-panel" style="display: none;">
         <div class="build-tabs">
           <button class="tab-btn active" data-cat="all">All</button>

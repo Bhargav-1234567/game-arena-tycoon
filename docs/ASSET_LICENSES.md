@@ -1,5 +1,11 @@
 # Asset Licenses & Attribution Log
 
+The interface favicon at `public/favicon.svg` is original SVG artwork created for this repository. It uses no third-party images, fonts, or asset packs.
+
+Puzzle component silhouettes and hazard styling in `src/puzzle/presentation.ts` and `src/puzzle.css` are adapted from the user-provided local Build & Boot project's `Home.razor.cs` and `wwwroot/css/app.css`. Level/build descriptions and tips are synchronized from its `GameCatalog.cs`. These are local project sources; no external image, font or asset pack was downloaded for the puzzle artwork.
+
+The Pixel District storefronts, roofs, signs, streets, trees, plaza, lighting fixtures and map controls are original procedural geometry, Canvas text and CSS. Imported neighborhood buildings, cars, bus and bicycle reuse the existing city GLB files under `public/assets/models/environment/city/`; no new external asset pack was downloaded for this feature. Existing source/license records still apply; the procedural additions do not independently verify the provenance of imported files.
+
 All 3D models integrated into the game are verified **CC0 / Free Commercial Use** assets sourced directly from established game asset creators (**Kenney** and **Quaternius**), adhering to the commercial-use checklist in Section 5 of the Blueprint.
 
 | Asset ID | File | Creator / Source | Original Pack | License | Attribution Required | Download Date |

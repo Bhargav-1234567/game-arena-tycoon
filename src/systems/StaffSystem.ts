@@ -1,3 +1,4 @@
+import { SECONDS_PER_GAME_HOUR } from '../data/simulation.ts';
 import { EconomySystem } from './EconomySystem.ts';
 
 export interface EmployeeRole {
@@ -23,7 +24,7 @@ export class StaffSystem {
       hiredCount: 1, // Start with 1 receptionist
       maxCount: 3,
       hiringCost: 150,
-      perkDescription: 'Speeds up customer check-in and queue throughput by +35%.',
+      perkDescription: 'Each additional cashier increases check-in throughput by +35%.',
       icon: '🎫'
     },
     {
@@ -54,6 +55,14 @@ export class StaffSystem {
 
   constructor(economy: EconomySystem) {
     this.economy = economy;
+  }
+
+  public getTechnicianMultiplier(): number {
+    return 1 + .25 * (this.roles.find((role) => role.id === 'technician')?.hiredCount ?? 0);
+  }
+
+  public getCashierMultiplier(): number {
+    return 1 + .35 * Math.max(0, (this.roles.find((role) => role.id === 'receptionist')?.hiredCount ?? 1) - 1);
   }
 
   public getTotalHourlyWages(): number {
@@ -87,8 +96,8 @@ export class StaffSystem {
   public update(deltaTime: number) {
     // Deduct staff wages every in-game hour (15 real seconds = 1 in-game hour)
     this.wageTimer += deltaTime;
-    if (this.wageTimer >= 15.0) {
-      this.wageTimer = 0;
+    if (this.wageTimer >= SECONDS_PER_GAME_HOUR) {
+      this.wageTimer -= SECONDS_PER_GAME_HOUR;
       const totalWages = this.getTotalHourlyWages();
       if (totalWages > 0) {
         this.economy.spend(totalWages);

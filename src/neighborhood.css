@@ -1,0 +1,50 @@
+#game-canvas { touch-action: none; }
+.district-ui { position: absolute; inset: 0; pointer-events: none; }
+.district-toolbar { position: absolute; left: 18px; bottom: 18px; width: 355px; padding: 15px; border-radius: 16px; background: #112b3cf2; border: 1px solid #4e716d; box-shadow: 0 6px 25px #001a2b44; pointer-events: auto; color: #eef6ed; }
+.district-title > span, .district-dialog header span { display: block; color: #9cd8be; font-size: 9px; letter-spacing: 2px; font-weight: 800; margin-bottom: 5px; }
+.district-title > strong { display: block; font-size: 18px; letter-spacing: -.4px; }
+.district-title > small { display: block; color: #b7cec9; font-size: 11px; margin: 5px 0 12px; }
+.world-view-switch { display: flex; background: #0a1c28; border-radius: 9px; padding: 3px; gap: 3px; }
+.district-ui button { cursor: pointer; font-family: inherit; }
+.world-view-switch button { flex: 1; color: #b8cece; padding: 9px 5px; border: 0; background: transparent; border-radius: 7px; font-size: 12px; font-weight: 700; }
+.world-view-switch button[aria-pressed=true] { color: #123b34; background: #a3e0bd; }
+.district-tools { display: flex; align-items: end; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.district-tools label { color: #a8c6c6; font-size: 9px; }
+.district-tools select { display: block; width: 90px; font-size: 11px; padding: 6px 3px; color: #d4e8e3; border: 1px solid #45646c; background: #1c3848; border-radius: 6px; margin-top: 3px; }
+.district-tools button { color: #d5e8de; background: #254959; border: 1px solid #537477; border-radius: 6px; padding: 7px; font-size: 11px; }
+.world-hotspot { position: absolute; display: flex; align-items: center; gap: 5px; transform: translate(-50%,-100%); pointer-events: auto; white-space: nowrap; color: #f4f4df; border: 1px solid #a6c4af; background: #193a42ee; padding: 7px 10px; border-radius: 8px 8px 8px 0; font-size: 10px; font-weight: 700; box-shadow: 0 3px 10px #102c3c55; }
+.world-hotspot[hidden], .district-labels[hidden], .district-backdrop[hidden] { display: none; }
+.world-hotspot:hover { background: #366452; transform: translate(-50%,-100%) scale(1.04); }
+.world-hotspot > span { color: #b9edbf; font-size: 13px; }
+.district-backdrop { position: fixed; inset: 0; z-index: 90; pointer-events: auto; background: #07152599; backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: flex-end; padding: 20px; }
+.district-dialog { width: 430px; max-width: 100%; max-height: calc(100dvh - 40px); overflow: auto; background: #142e3e; border: 1px solid #52756f; border-radius: 18px; padding: 24px; color: #e7f1e8; box-shadow: 0 20px 70px #0006; }
+.district-dialog header { display: flex; align-items: start; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.district-dialog h2 { font-size: 24px; letter-spacing: -.6px; }
+.district-dialog h3 { font-size: 19px; margin-bottom: 12px; }
+.district-dialog header button { border: 1px solid #65827e; background: #244757; color: white; border-radius: 7px; padding: 8px; }
+.district-dialog p { line-height: 1.7; font-size: 13px; color: #bbd1cf; margin: 12px 0; }
+.district-dialog label { display: block; font-size: 12px; margin: 18px 0 10px; }
+.district-dialog input { display: block; width: 100%; border-radius: 7px; border: 1px solid #5e827e; background: #102633; color: #edf5ef; font: inherit; padding: 11px; margin-top: 7px; user-select: text; }
+.district-card { padding: 16px; border: 1px solid #3c6267; border-radius: 12px; margin: 20px 0; background: #1a3a4a; }
+.district-card > span { display: block; font-size: 9px; letter-spacing: 1px; color: #a7d6b7; margin-bottom: 8px; }
+.district-dialog footer { border-top: 1px solid #ffffff15; margin-top: 24px; padding-top: 16px; font-size: 10px; color: #90b4b3; line-height: 1.5; }
+.district-hero { font-size: 48px; padding: 10px 0; }
+.district-guide { display: grid; gap: 8px; margin: 20px 0; }
+.district-ui button:focus-visible, .district-ui input:focus-visible, .district-ui select:focus-visible { outline: 3px solid #c5edbc; outline-offset: 3px; }
+.district-ui button:disabled { opacity: .45; cursor: not-allowed; }
+body[data-world-view=neighborhood] .build-container, body[data-world-view=neighborhood] .hint-tip { display: none; }
+body[data-world-view=neighborhood] .brand-badge { background: #5d926e; }
+@media(max-width: 750px) {
+  .district-toolbar { width: 315px; padding: 11px; left: 10px; bottom: 10px; }
+  .district-title > strong { font-size: 15px; }
+  .world-hotspot { font-size: 9px; padding: 5px 6px; max-width: 145px; white-space: normal; }
+  .district-ui[data-view=lounge] .district-toolbar { bottom: 86px; width: 275px; }
+  .district-ui[data-view=lounge] .district-title { display: none; }
+  .district-dialog { padding: 18px; }
+  .district-backdrop { padding: 8px; }
+}
+@media(max-width: 500px) {
+  .world-hotspot { font-size: 0; padding: 7px; border-radius: 50%; width: 30px; height: 30px; justify-content: center; }
+  .world-hotspot > span { font-size: 14px; }
+  .district-toolbar { width: 305px; }
+}

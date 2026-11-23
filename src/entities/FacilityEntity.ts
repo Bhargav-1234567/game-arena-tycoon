@@ -152,6 +152,7 @@ export class FacilityEntity {
   private mesh?: THREE.Group;
   private selectionRing?: THREE.Mesh;
   public isSelected: boolean = false;
+  public isUpgrading = false;
 
   constructor(
     id: string,
@@ -216,11 +217,10 @@ export class FacilityEntity {
   }
 
   private async applyTierModel(tier: FacilityTier) {
-    if (this.mesh) {
-      this.group.remove(this.mesh);
-    }
     const assetMgr = AssetManager.getInstance();
-    this.mesh = await assetMgr.loadModel(tier.model);
+    const model = await assetMgr.loadRequiredModel(tier.model);
+    if (this.mesh) this.group.remove(this.mesh);
+    this.mesh = model;
     this.mesh.position.set(0, tier.yOffset ?? 0, 0);
     this.mesh.rotation.y = tier.rotationOffset ?? 0;
     this.mesh.userData.facility = this;
@@ -238,9 +238,19 @@ export class FacilityEntity {
     }
   }
 
-  public async upgrade(nextTier: FacilityTier) {
-    this.currentTier = nextTier;
-    await this.applyTierModel(nextTier);
+  public async upgrade(nextTier: FacilityTier, beforeCommit: () => boolean = () => true): Promise<void> {
+    if (this.isUpgrading || !this.group.visible || nextTier.level !== this.currentTier.level + 1) throw new Error('This upgrade is no longer available.');
+    this.isUpgrading = true;
+    try {
+      const model = await AssetManager.getInstance().loadRequiredModel(nextTier.model);
+      model.position.set(0, nextTier.yOffset ?? 0, 0);
+      model.rotation.y = nextTier.rotationOffset ?? 0;
+      model.traverse((child) => { child.userData.facility = this; });
+      if (!beforeCommit()) throw new Error('Not enough cash.');
+      if (this.mesh) this.group.remove(this.mesh);
+      this.currentTier = nextTier;
+      this.mesh = model;
+      this.group.add(model);
+    } finally { this.isUpgrading = false; }
   }
 }
-

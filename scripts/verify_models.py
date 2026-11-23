@@ -1,6 +1,7 @@
 import os
 import re
 import glob
+import sys
 
 ts_files = glob.glob('src/**/*.ts', recursive=True)
 model_urls = set()
@@ -10,7 +11,9 @@ for ts in ts_files:
     with open(ts, 'r', encoding='utf-8') as f:
         content = f.read()
         for match in pattern.findall(content):
-            model_urls.add(match)
+            # Interpolated templates are resolved at runtime and covered by browser network checks.
+            if '${' not in match:
+                model_urls.add(match)
 
 print(f"Total unique model paths referenced in TypeScript: {len(model_urls)}")
 missing = []
@@ -26,6 +29,7 @@ if missing:
     print("\nWARNING - MISSING FILES:")
     for m in missing:
         print("  [MISSING]", m[0])
+    sys.exit(1)
 else:
     print("\nALL MODEL PATHS EXIST ON DISK!")
 

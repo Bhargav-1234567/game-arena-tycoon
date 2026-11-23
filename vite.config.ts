@@ -5,6 +5,7 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
+    watch: { ignored: ['**/test-results/**', '**/playwright-report/**', '**/artifacts/**'] },
     allowedHosts: ["statute-morse-stowing.ngrok-free.dev"]
   },
   build: {

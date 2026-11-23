@@ -6,15 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/unit/*.test.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "three": "^0.160.0"
   },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22.6"
+  },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/three": "^0.160.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.12"
   }
 }
-

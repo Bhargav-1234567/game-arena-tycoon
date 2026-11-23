@@ -81,6 +81,15 @@ export class AssetManager {
     return [];
   }
 
+  public async loadRequiredModel(url: string): Promise<THREE.Group> {
+    const model = await this.loadModel(url);
+    if (model.userData.assetFallback) {
+      this.cache.delete(url);
+      throw new Error('This model could not be loaded. Your cash has been kept. Please try again.');
+    }
+    return model;
+  }
+
   public async loadModel(url: string): Promise<THREE.Group> {
     if (this.cache.has(url)) {
       return this.cloneModel(this.cache.get(url)!);
@@ -120,6 +129,7 @@ export class AssetManager {
         (err) => {
           console.warn(`[AssetManager] Error loading ${url}, generating fallback:`, err);
           const fallback = this.createFallbackModel(url);
+          fallback.userData.assetFallback = true;
           this.cache.set(url, fallback);
           resolve(fallback);
         }

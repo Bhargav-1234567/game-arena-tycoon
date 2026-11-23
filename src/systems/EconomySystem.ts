@@ -1,3 +1,4 @@
+import { GAME_MINUTES_PER_SECOND } from '../data/simulation.ts';
 export class EconomySystem {
   public cash: number = 1800000; // Starting capital
   public reputation: number = 75; // 0 - 100
@@ -41,7 +42,7 @@ export class EconomySystem {
 
   public update(deltaTime: number) {
     // 1 real second = 4 in-game minutes
-    this.timeMinutes += deltaTime * 4;
+    this.timeMinutes += deltaTime * GAME_MINUTES_PER_SECOND;
     if (this.timeMinutes >= 24 * 60) {
       this.timeMinutes -= 24 * 60;
       this.day += 1;

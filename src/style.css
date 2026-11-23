@@ -722,3 +722,16 @@ body, html {
   color: white;
 }
 
+
+.placement-status { position: absolute; bottom: 80px; left: 0; max-width: min(420px, 85vw); margin: 0; padding: 10px 14px; border: 1px solid #fbbf24; border-radius: 12px; background: #172033f5; color: #fde68a; font-size: 13px; pointer-events: none; }
+.station-inspector button:disabled { opacity: .5; cursor: not-allowed; }
+.upgrade-error { color: #fca5a5; font-size: 13px; margin: 10px 0; }
+@media (max-width: 750px) {
+  .hint-tip { display: none; }
+  .build-container { width: calc(100vw - 20px); }
+  .build-controls-bar { gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .build-controls-bar button { padding: 10px 12px; font-size: 12px; }
+  .build-panel { max-height: 48vh; overflow-y: auto; }
+  .build-tabs { overflow-x: auto; }
+  .placement-status { bottom: 210px; left: 0; }
+}

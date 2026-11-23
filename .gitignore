@@ -51,6 +51,7 @@ temp/
 .nyc_output/
 playwright-report/
 test-results/
+artifacts/gameplay/
 
 # TypeScript (if generated accidentally)
 *.tsbuildinfo

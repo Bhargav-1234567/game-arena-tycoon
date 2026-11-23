@@ -1,6 +1,14 @@
 import * as THREE from 'three';
+import { DISTRICT_BOUNDS } from '../data/world-layout.ts';
+import type { WorldBounds } from '../data/world-layout.ts';
+import type { WorldView } from '../systems/NeighborhoodSystem.ts';
 
 export class CameraController {
+  public mode: WorldView = 'lounge';
+  private roomBounds?: WorldBounds;
+  private touches = new Map<number, THREE.Vector2>();
+  private pinchDistance = 0;
+  public enabled = true;
   public camera: THREE.OrthographicCamera;
   private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
   private currentTarget: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
@@ -8,7 +16,7 @@ export class CameraController {
   public zoomLevel: number = 8;
   private targetZoom: number = 8;
   private minZoom: number = 4;
-  private maxZoom: number = 24;
+  private maxZoom: number = 220;
 
   // Camera pan target clamp bounds (aligned with exterior city environment)
   private minTargetX: number = -14.0;
@@ -56,7 +64,13 @@ export class CameraController {
   private setupListeners() {
     // Mouse events
     this.domElement.addEventListener('pointerdown', (e) => {
-      if (e.button === 2 || e.button === 1 || (e.button === 0 && e.shiftKey)) {
+      if (!this.enabled) return;
+      if (e.pointerType === 'touch') {
+        this.touches.set(e.pointerId, new THREE.Vector2(e.clientX, e.clientY));
+        this.domElement.setPointerCapture(e.pointerId);
+        if (this.touches.size === 2) { const points = [...this.touches.values()]; this.pinchDistance = points[0].distanceTo(points[1]); }
+      }
+      if (e.pointerType === 'touch' || e.button === 2 || e.button === 1 || (e.button === 0 && e.shiftKey)) {
         this.isDragging = true;
         this.dragStart.set(e.clientX, e.clientY);
         this.domElement.style.cursor = 'grab';
@@ -64,7 +78,15 @@ export class CameraController {
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!this.isDragging) return;
+      if (!this.enabled || !this.isDragging) return;
+      if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
+        this.touches.set(e.pointerId, new THREE.Vector2(e.clientX, e.clientY));
+        if (this.touches.size === 2) {
+          const points = [...this.touches.values()], distance = points[0].distanceTo(points[1]);
+          if (this.pinchDistance > 0) this.targetZoom = THREE.MathUtils.clamp(this.targetZoom * this.pinchDistance / distance, this.minZoom, this.maxZoom);
+          this.pinchDistance = distance; return;
+        }
+      }
 
       const deltaX = (e.clientX - this.dragStart.x) * 0.015 * (this.zoomLevel / 8);
       const deltaY = (e.clientY - this.dragStart.y) * 0.015 * (this.zoomLevel / 8);
@@ -80,14 +102,17 @@ export class CameraController {
       this.dragStart.set(e.clientX, e.clientY);
     });
 
-    window.addEventListener('pointerup', () => {
+    window.addEventListener('pointerup', (event) => {
+      this.touches.delete(event.pointerId); this.pinchDistance = 0;
       this.isDragging = false;
       this.domElement.style.cursor = 'default';
     });
+    window.addEventListener('pointercancel', (event) => { this.touches.delete(event.pointerId); this.isDragging = false; this.pinchDistance = 0; });
 
     // Zoom via Wheel
     this.domElement.addEventListener('wheel', (e) => {
       e.preventDefault();
+      if (!this.enabled) return;
       const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
       this.targetZoom = THREE.MathUtils.clamp(
         this.targetZoom * zoomFactor,
@@ -103,6 +128,7 @@ export class CameraController {
     window.addEventListener('resize', () => {
       this.aspect = window.innerWidth / window.innerHeight;
       this.updateProjection();
+      if (this.roomBounds) this.setView(this.mode, this.roomBounds);
     });
   }
 
@@ -119,6 +145,27 @@ export class CameraController {
     this.clampTarget();
   }
 
+  public get isTransitioning(): boolean { return this.currentTarget.distanceTo(this.target) > .02 || Math.abs(this.zoomLevel - this.targetZoom) > .02; }
+
+  public setView(view: WorldView, room: WorldBounds, immediate = false): void {
+    this.mode = view; this.roomBounds = { ...room }; this.isDragging = false;
+    this.touches.clear(); this.pinchDistance = 0;
+    if (view === 'lounge' && room.maxX - room.minX === 12 && room.maxZ - room.minZ === 10) {
+      this.target.set(0, 0, 0); this.targetZoom = 8;
+    } else {
+      const bounds = view === 'neighborhood' ? DISTRICT_BOUNDS : room;
+      this.target.set((bounds.minX + bounds.maxX) / 2, 0, (bounds.minZ + bounds.maxZ) / 2);
+      const width = bounds.maxX - bounds.minX, depth = bounds.maxZ - bounds.minZ;
+      const screenWidth = (width + depth) * Math.SQRT1_2;
+      const screenHeight = (width + depth) / Math.sqrt(6) + (view === 'neighborhood' ? 5 : 2);
+      this.targetZoom = Math.max(screenHeight, screenWidth / this.aspect) * 1.06;
+    }
+    this.setPanBounds(-27, 27, -20, 29);
+    if (immediate) { this.currentTarget.copy(this.target); this.zoomLevel = this.targetZoom; this.updateProjection(); this.updateCameraPosition(); }
+  }
+
+  public zoomBy(factor: number): void { this.targetZoom = THREE.MathUtils.clamp(this.targetZoom * factor, this.minZoom, this.maxZoom); }
+
   public setPanBounds(minX: number, maxX: number, minZ: number, maxZ: number) {
     this.minTargetX = minX;
     this.maxTargetX = maxX;
@@ -133,6 +180,7 @@ export class CameraController {
   }
 
   public update(deltaTime: number) {
+    if (!this.enabled) { this.isDragging = false; return; }
     this.clampTarget();
     // Smooth dampening towards target
     const lerpSpeed = Math.min(1.0, deltaTime * 12);

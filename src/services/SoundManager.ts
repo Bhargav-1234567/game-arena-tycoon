@@ -39,6 +39,25 @@ export class SoundManager {
     return this.isMuted;
   }
 
+  public playPuzzle(cue: 'select' | 'match' | 'line' | 'rgb' | 'gpu' | 'cpu' | 'mouse' | 'cooling' | 'reward' | 'invalid'): void {
+    if (this.isMuted) return;
+    try { this.initContext(); } catch { return; }
+    if (!this.ctx) return;
+    const notes: Record<typeof cue, number[]> = {
+      select: [440], match: [523, 659], line: [330, 660, 990], rgb: [523, 659, 784, 1047],
+      gpu: [196, 294, 392], cpu: [440, 554, 659], mouse: [660, 880], cooling: [784, 587, 392],
+      reward: [523, 659, 784, 1047], invalid: [147, 110]
+    };
+    notes[cue].forEach((frequency, index) => {
+      const start = this.ctx!.currentTime + index * .055;
+      const oscillator = this.ctx!.createOscillator(), gain = this.ctx!.createGain();
+      oscillator.type = cue === 'invalid' ? 'sawtooth' : 'triangle';
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(.025, start); gain.gain.exponentialRampToValueAtTime(.0001, start + .16);
+      oscillator.connect(gain).connect(this.ctx!.destination); oscillator.start(start); oscillator.stop(start + .17);
+    });
+  }
+
   /**
    * Cash / Revenue Collected Sound: bright dual-frequency coin register chime
    */

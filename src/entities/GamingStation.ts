@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
-import { pcUpgrades, PCUpgrade } from '../data/pc-upgrades.ts';
-import { chairUpgrades, ChairUpgrade } from '../data/chair-upgrades.ts';
-import { monitorUpgrades, MonitorUpgrade } from '../data/monitor-upgrades.ts';
-import { deskUpgrades, DeskUpgrade } from '../data/desk-upgrades.ts';
+import { pcUpgrades, type PCUpgrade } from '../data/pc-upgrades.ts';
+import { chairUpgrades, type ChairUpgrade } from '../data/chair-upgrades.ts';
+import { monitorUpgrades, type MonitorUpgrade } from '../data/monitor-upgrades.ts';
+import { deskUpgrades, type DeskUpgrade } from '../data/desk-upgrades.ts';
 import {
   keyboardUpgrades,
   mouseUpgrades,
   speakerUpgrades,
-  PeripheralUpgrade
+  type PeripheralUpgrade
 } from '../data/peripheral-upgrades.ts';
 
 export interface ComponentDimensions {
@@ -77,6 +77,12 @@ export const SPEAKER_DIMS: Record<number, ComponentDimensions> = {
 };
 
 export class GamingStation {
+  public neighborhoodSatisfactionBonus = 0;
+  public isUpgrading = false;
+  public accessIssue = '';
+  public getTechnicianMultiplier: () => number = () => 1;
+  public validateLayoutChange?: (chairLevel: number, deskLevel: number) => void;
+  public onLayoutChanged?: () => void;
   public readonly id: string;
   public group: THREE.Group = new THREE.Group();
   public gridX: number;
@@ -253,25 +259,25 @@ export class GamingStation {
   public async build() {
     const assetMgr = AssetManager.getInstance();
 
-    this.deskMesh = await assetMgr.loadModel(this.currentDesk.model);
+    this.deskMesh = await assetMgr.loadRequiredModel(this.currentDesk.model);
     this.group.add(this.deskMesh);
 
-    this.chairMesh = await assetMgr.loadModel(this.currentChair.model);
+    this.chairMesh = await assetMgr.loadRequiredModel(this.currentChair.model);
     this.group.add(this.chairMesh);
 
-    this.pcMesh = await assetMgr.loadModel(this.currentPC.model);
+    this.pcMesh = await assetMgr.loadRequiredModel(this.currentPC.model);
     this.group.add(this.pcMesh);
 
-    this.monitorMesh = await assetMgr.loadModel(this.currentMonitor.model);
+    this.monitorMesh = await assetMgr.loadRequiredModel(this.currentMonitor.model);
     this.group.add(this.monitorMesh);
 
-    this.keyboardMesh = await assetMgr.loadModel(this.currentKeyboard.model);
+    this.keyboardMesh = await assetMgr.loadRequiredModel(this.currentKeyboard.model);
     this.group.add(this.keyboardMesh);
 
-    this.mouseMesh = await assetMgr.loadModel(this.currentMouse.model);
+    this.mouseMesh = await assetMgr.loadRequiredModel(this.currentMouse.model);
     this.group.add(this.mouseMesh);
 
-    this.speakerMesh = await assetMgr.loadModel(this.currentSpeaker.model);
+    this.speakerMesh = await assetMgr.loadRequiredModel(this.currentSpeaker.model);
     this.group.add(this.speakerMesh);
 
     this.updateLayout();
@@ -285,68 +291,58 @@ export class GamingStation {
     }
   }
 
-  // Upgrade methods (seamless model swap + full dynamic layout recalculation)
-  public async upgradePC(newTier: PCUpgrade) {
-    this.currentPC = newTier;
-    if (this.pcMesh) this.group.remove(this.pcMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.pcMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.pcMesh);
-    this.updateLayout();
+  private async swapComponent<T extends { level: number; model: string }>(tier: T, current: () => T,
+    mesh: () => THREE.Group | undefined, apply: (tier: T, model: THREE.Group) => void,
+    beforeCommit: () => boolean, validate?: () => void): Promise<void> {
+    if (this.isUpgrading || !this.group.visible || tier.level !== current().level + 1) throw new Error('This upgrade is no longer available.');
+    this.isUpgrading = true;
+    try {
+      validate?.();
+      const model = await AssetManager.getInstance().loadRequiredModel(tier.model);
+      validate?.();
+      if (!beforeCommit()) throw new Error('Not enough cash.');
+      const previous = mesh();
+      if (previous) this.group.remove(previous);
+      apply(tier, model);
+      this.group.add(model);
+      this.updateLayout();
+      this.onLayoutChanged?.();
+    } finally { this.isUpgrading = false; }
   }
 
-  public async upgradeChair(newTier: ChairUpgrade) {
-    this.currentChair = newTier;
-    if (this.chairMesh) this.group.remove(this.chairMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.chairMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.chairMesh);
-    this.updateLayout();
+  public async upgradePC(tier: PCUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentPC, () => this.pcMesh,
+      (next, model) => { this.currentPC = next; this.pcMesh = model; }, beforeCommit);
   }
 
-  public async upgradeMonitor(newTier: MonitorUpgrade) {
-    this.currentMonitor = newTier;
-    if (this.monitorMesh) this.group.remove(this.monitorMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.monitorMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.monitorMesh);
-    this.updateLayout();
+  public async upgradeChair(tier: ChairUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentChair, () => this.chairMesh,
+      (next, model) => { this.currentChair = next; this.chairMesh = model; }, beforeCommit, () => this.validateLayoutChange?.(tier.level, this.currentDesk.level));
   }
 
-  public async upgradeDesk(newTier: DeskUpgrade) {
-    this.currentDesk = newTier;
-    if (this.deskMesh) this.group.remove(this.deskMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.deskMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.deskMesh);
-    this.updateLayout();
+  public async upgradeMonitor(tier: MonitorUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentMonitor, () => this.monitorMesh,
+      (next, model) => { this.currentMonitor = next; this.monitorMesh = model; }, beforeCommit);
   }
 
-  public async upgradeKeyboard(newTier: PeripheralUpgrade) {
-    this.currentKeyboard = newTier;
-    if (this.keyboardMesh) this.group.remove(this.keyboardMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.keyboardMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.keyboardMesh);
-    this.updateLayout();
+  public async upgradeDesk(tier: DeskUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentDesk, () => this.deskMesh,
+      (next, model) => { this.currentDesk = next; this.deskMesh = model; }, beforeCommit, () => this.validateLayoutChange?.(this.currentChair.level, tier.level));
   }
 
-  public async upgradeMouse(newTier: PeripheralUpgrade) {
-    this.currentMouse = newTier;
-    if (this.mouseMesh) this.group.remove(this.mouseMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.mouseMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.mouseMesh);
-    this.updateLayout();
+  public async upgradeKeyboard(tier: PeripheralUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentKeyboard, () => this.keyboardMesh,
+      (next, model) => { this.currentKeyboard = next; this.keyboardMesh = model; }, beforeCommit);
   }
 
-  public async upgradeSpeaker(newTier: PeripheralUpgrade) {
-    this.currentSpeaker = newTier;
-    if (this.speakerMesh) this.group.remove(this.speakerMesh);
-    const assetMgr = AssetManager.getInstance();
-    this.speakerMesh = await assetMgr.loadModel(newTier.model);
-    this.group.add(this.speakerMesh);
-    this.updateLayout();
+  public async upgradeMouse(tier: PeripheralUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentMouse, () => this.mouseMesh,
+      (next, model) => { this.currentMouse = next; this.mouseMesh = model; }, beforeCommit);
+  }
+
+  public async upgradeSpeaker(tier: PeripheralUpgrade, beforeCommit: () => boolean = () => true): Promise<void> {
+    await this.swapComponent(tier, () => this.currentSpeaker, () => this.speakerMesh,
+      (next, model) => { this.currentSpeaker = next; this.speakerMesh = model; }, beforeCommit);
   }
 
   public getHourlyRevenue(): number {
@@ -359,14 +355,22 @@ export class GamingStation {
   }
 
   public getSatisfactionScore(): number {
-    return (
+    return Math.round(this.getTechnicianMultiplier() * (
+      this.neighborhoodSatisfactionBonus +
       this.currentPC.performance +
       this.currentChair.comfort +
       this.currentMonitor.satisfactionBonus +
       this.currentKeyboard.bonus +
       this.currentMouse.bonus +
       this.currentSpeaker.bonus
-    );
+    ));
+  }
+
+  public getApproachWorldPosition(): THREE.Vector3 {
+    const chair = CHAIR_DIMS[this.currentChair.level];
+    const local = new THREE.Vector3(0, 0, this.computedChairZ + chair.d / 2 + .42);
+    local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
+    return this.group.position.clone().add(local);
   }
 
   public getSeatingWorldPosition(): THREE.Vector3 {

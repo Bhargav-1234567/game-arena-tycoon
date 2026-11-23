@@ -8,6 +8,10 @@ import { pcUpgrades } from '../data/pc-upgrades.ts';
 import { chairUpgrades } from '../data/chair-upgrades.ts';
 import { monitorUpgrades } from '../data/monitor-upgrades.ts';
 import { deskUpgrades } from '../data/desk-upgrades.ts';
+import { getPart, PART_SLOTS, SLOT_LABELS } from '../data/parts.ts';
+import type { PartSlot } from '../data/parts.ts';
+import type { WorkshopSystem } from '../systems/WorkshopSystem.ts';
+import { escapeHtml } from './html.ts';
 import {
   keyboardUpgrades,
   mouseUpgrades,
@@ -15,6 +19,14 @@ import {
 } from '../data/peripheral-upgrades.ts';
 
 export class StationInspector {
+  private workshop?: WorkshopSystem;
+  private hardwareError = '';
+  private upgradeError = '';
+
+  public setWorkshop(workshop: WorkshopSystem): void {
+    this.workshop = workshop;
+    workshop.subscribe(() => { if (this.currentStation && !this.isUpgrading) this.renderStation(); });
+  }
   private element: HTMLElement;
   private currentStation: GamingStation | null = null;
   private currentReception: ReceptionDesk | null = null;
@@ -27,10 +39,10 @@ export class StationInspector {
   private particleSystem?: ParticleSystem;
   private isUpgrading: boolean = false;
 
-  public onMoveRequested?: (target: {
-    type: 'station' | 'reception' | 'facility' | 'object';
-    entity: any;
-  }) => void;
+  public onMoveRequested?: (target:
+    { type: 'station'; entity: GamingStation } | { type: 'reception'; entity: ReceptionDesk } |
+    { type: 'facility'; entity: FacilityEntity } | { type: 'object'; entity: THREE.Object3D }
+  ) => void;
 
   constructor(parent: HTMLElement, economySystem: EconomySystem, particleSystem?: ParticleSystem) {
     this.economySystem = economySystem;
@@ -57,6 +69,8 @@ export class StationInspector {
   }
 
   public inspectStation(station: GamingStation | null) {
+    this.hardwareError = '';
+    this.upgradeError = '';
     this.currentReception = null;
     this.currentFacility = null;
     this.currentObject = null;
@@ -127,6 +141,21 @@ export class StationInspector {
     }
   }
 
+  public updateStatus(): void {
+    const station = this.currentStation;
+    if (!station || this.isUpgrading) return;
+    const status = this.element.querySelector('.status-text');
+    if (status) status.textContent = station.accessIssue ? `Unavailable: ${station.accessIssue}` : station.isOccupied ? 'Reserved for customer 🎮' : 'Available for customers';
+    this.element.querySelector('.inspector-status-card')?.classList.toggle('occupied', station.isOccupied);
+    const move = this.element.querySelector<HTMLButtonElement>('#move-item-btn');
+    if (move) move.disabled = station.isOccupied || !!station.currentGamerId || station.isUpgrading;
+    for (const [selector, next] of [['#upgrade-chair-btn', chairUpgrades.find((tier) => tier.level === station.currentChair.level + 1)],
+      ['#upgrade-desk-btn', deskUpgrades.find((tier) => tier.level === station.currentDesk.level + 1)]] as const) {
+      const button = this.element.querySelector<HTMLButtonElement>(selector);
+      if (button && next) button.disabled = station.isOccupied || station.isUpgrading || !this.economySystem.canAfford(next.price);
+    }
+  }
+
   private renderReception() {
     if (!this.currentReception) return;
     const r = this.currentReception;
@@ -191,22 +220,18 @@ export class StationInspector {
     });
 
     this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
-      if (this.onMoveRequested) {
+      if (!this.isUpgrading && this.onMoveRequested) {
         this.onMoveRequested({ type: 'reception', entity: r });
       }
     });
 
-    if (nextTier) {
-      this.element.querySelector('#upgrade-reception-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextTier.price)) {
-          const oldRep = r.currentTier.reputationBonus;
-          await r.upgrade(nextTier);
-          this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
-          this.celebrateUpgrade(r.group.position, 0x38bdf8);
-          this.renderReception();
-        }
-      });
-    }
+    if (nextTier) this.bindUpgrade('#upgrade-reception-btn', async (commit) => {
+      const oldRep = r.currentTier.reputationBonus;
+      await r.upgrade(nextTier, () => commit(nextTier.price));
+      this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
+      this.celebrateUpgrade(r.group.position, 0x38bdf8);
+    });
+    this.renderUpgradeState();
   }
 
   private renderFacility() {
@@ -304,28 +329,18 @@ export class StationInspector {
     });
 
     this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
-      if (this.onMoveRequested) {
+      if (!this.isUpgrading && this.onMoveRequested) {
         this.onMoveRequested({ type: 'facility', entity: f });
       }
     });
 
-    if (nextTier) {
-      this.element.querySelector('#upgrade-facility-btn')?.addEventListener('click', async () => {
-        if (!this.economySystem.canAfford(nextTier.price)) return;
-        this.isUpgrading = true;
-        try {
-          if (this.economySystem.spend(nextTier.price)) {
-            const oldRep = f.currentTier.reputationBonus;
-            await f.upgrade(nextTier);
-            this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
-            this.celebrateUpgrade(f.group.position, typeConfig.themeHex);
-          }
-        } finally {
-          this.isUpgrading = false;
-          this.renderFacility();
-        }
-      });
-    }
+    if (nextTier) this.bindUpgrade('#upgrade-facility-btn', async (commit) => {
+      const oldRep = f.currentTier.reputationBonus;
+      await f.upgrade(nextTier, () => commit(nextTier.price));
+      this.economySystem.addReputation(nextTier.reputationBonus - oldRep);
+      this.celebrateUpgrade(f.group.position, typeConfig.themeHex);
+    });
+    this.renderUpgradeState();
   }
 
   private renderStation() {
@@ -356,7 +371,7 @@ export class StationInspector {
 
       <div class="inspector-status-card ${s.isOccupied ? 'occupied' : 'idle'}">
         <span class="status-dot"></span>
-        <span class="status-text">${s.isOccupied ? 'Gamer In Session 🎮' : 'Available for Customers ⏳'}</span>
+        <span class="status-text">${s.accessIssue ? `Unavailable: ${escapeHtml(s.accessIssue)}` : s.isOccupied ? 'Reserved for customer 🎮' : 'Available for customers'}</span>
       </div>
 
       <div class="metrics-grid">
@@ -370,6 +385,7 @@ export class StationInspector {
         </div>
       </div>
 
+      ${this.renderHardware(s.id)}
       <h4 class="section-title">Hardware & Modular Upgrades (7 Components)</h4>
 
       <div class="upgrade-list">
@@ -480,86 +496,95 @@ export class StationInspector {
       </div>
     `;
 
+    this.element.querySelectorAll<HTMLButtonElement>('[data-hardware-attach], [data-hardware-detach]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.hardwareError = '';
+        try {
+          if (button.dataset.hardwareDetach) this.workshop?.detach(button.dataset.hardwareDetach, s.id);
+          else {
+            const slot = button.dataset.hardwareAttach as PartSlot;
+            const select = this.element.querySelector<HTMLSelectElement>(`[data-hardware-select="${slot}"]`);
+            if (select?.value) this.workshop?.attach(select.value, s.id, slot);
+          }
+        } catch (error) { this.hardwareError = error instanceof Error ? error.message : 'Unable to update this part.'; }
+        this.renderStation();
+      });
+    });
+
     // Button event listeners
     this.element.querySelector('#close-inspector-btn')?.addEventListener('click', () => {
       this.inspectStation(null);
     });
 
     this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
-      if (this.onMoveRequested) {
+      if (!this.isUpgrading && this.onMoveRequested) {
         this.onMoveRequested({ type: 'station', entity: s });
       }
     });
 
-    if (nextPC) {
-      this.element.querySelector('#upgrade-pc-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextPC.price)) {
-          await s.upgradePC(nextPC);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
+    if (nextPC) this.bindUpgrade('#upgrade-pc-btn', async (commit) => {
+      await s.upgradePC(nextPC, () => commit(nextPC.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextMonitor) this.bindUpgrade('#upgrade-monitor-btn', async (commit) => {
+      await s.upgradeMonitor(nextMonitor, () => commit(nextMonitor.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextChair) this.bindUpgrade('#upgrade-chair-btn', async (commit) => {
+      await s.upgradeChair(nextChair, () => commit(nextChair.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextDesk) this.bindUpgrade('#upgrade-desk-btn', async (commit) => {
+      await s.upgradeDesk(nextDesk, () => commit(nextDesk.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextKB) this.bindUpgrade('#upgrade-kb-btn', async (commit) => {
+      await s.upgradeKeyboard(nextKB, () => commit(nextKB.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextMouse) this.bindUpgrade('#upgrade-mouse-btn', async (commit) => {
+      await s.upgradeMouse(nextMouse, () => commit(nextMouse.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    if (nextSpeaker) this.bindUpgrade('#upgrade-speaker-btn', async (commit) => {
+      await s.upgradeSpeaker(nextSpeaker, () => commit(nextSpeaker.price));
+      this.celebrateUpgrade(s.group.position);
+    });
+    const move = this.element.querySelector<HTMLButtonElement>('#move-item-btn')!;
+    move.disabled = s.isOccupied || !!s.currentGamerId || s.isUpgrading;
+    if (move.disabled) move.title = 'Wait for the customer or upgrade to finish before moving this PC.';
+    if (s.isOccupied) this.element.querySelectorAll<HTMLButtonElement>('#upgrade-chair-btn, #upgrade-desk-btn').forEach((button) => {
+      button.disabled = true; button.title = 'Wait for the customer to leave before changing chair or desk geometry.';
+    });
+    if (s.accessIssue) {
+      const warning = document.createElement('p'); warning.className = 'upgrade-error'; warning.textContent = s.accessIssue;
+      this.element.prepend(warning);
     }
+    this.renderUpgradeState();
+  }
 
-    if (nextMonitor) {
-      this.element.querySelector('#upgrade-monitor-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextMonitor.price)) {
-          await s.upgradeMonitor(nextMonitor);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
+  private renderUpgradeState(): void {
+    if (this.upgradeError) {
+      const error = document.createElement('p'); error.className = 'upgrade-error'; error.setAttribute('role', 'alert');
+      error.textContent = this.upgradeError; this.element.append(error);
     }
+    if (this.isUpgrading) this.element.querySelectorAll<HTMLButtonElement>('button:not(#close-inspector-btn)').forEach((button) => { button.disabled = true; });
+  }
 
-    if (nextChair) {
-      this.element.querySelector('#upgrade-chair-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextChair.price)) {
-          await s.upgradeChair(nextChair);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
-    }
-
-    if (nextDesk) {
-      this.element.querySelector('#upgrade-desk-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextDesk.price)) {
-          await s.upgradeDesk(nextDesk);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
-    }
-
-    if (nextKB) {
-      this.element.querySelector('#upgrade-kb-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextKB.price)) {
-          await s.upgradeKeyboard(nextKB);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
-    }
-
-    if (nextMouse) {
-      this.element.querySelector('#upgrade-mouse-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextMouse.price)) {
-          await s.upgradeMouse(nextMouse);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
-    }
-
-    if (nextSpeaker) {
-      this.element.querySelector('#upgrade-speaker-btn')?.addEventListener('click', async () => {
-        if (this.economySystem.spend(nextSpeaker.price)) {
-          await s.upgradeSpeaker(nextSpeaker);
-          this.celebrateUpgrade(s.group.position, 0x0d9488);
-          this.renderStation();
-        }
-      });
-    }
+  private bindUpgrade(selector: string, action: (commit: (price: number) => boolean) => Promise<void>): void {
+    this.element.querySelector(selector)?.addEventListener('click', async () => {
+      if (this.isUpgrading) return;
+      this.isUpgrading = true; this.upgradeError = '';
+      this.renderUpgradeState();
+      try { await action((price) => this.economySystem.spend(price)); }
+      catch (error) { this.upgradeError = error instanceof Error ? error.message : 'The upgrade could not be loaded. Please try again.'; }
+      finally {
+        this.isUpgrading = false;
+        if (this.currentStation) this.renderStation();
+        else if (this.currentReception) this.renderReception();
+        else if (this.currentFacility) this.renderFacility();
+      }
+    });
   }
 
   private renderGenericItem(obj: THREE.Object3D) {
@@ -596,9 +621,24 @@ export class StationInspector {
     });
 
     this.element.querySelector('#move-item-btn')?.addEventListener('click', () => {
-      if (this.onMoveRequested) {
+      if (!this.isUpgrading && this.onMoveRequested) {
         this.onMoveRequested({ type: 'object', entity: obj });
       }
     });
+  }
+
+  private renderHardware(stationId: string): string {
+    if (!this.workshop) return '';
+    const parts = this.workshop.state.parts;
+    return `<section class="hardware-slots"><h4>Puzzle-earned Parts</h4><p>Collect parts in Puzzle Lab and connect them here. Detached parts return to your inventory.</p>
+      ${PART_SLOTS.map((slot) => {
+        const installed = parts.find((part) => part.stationId === stationId && getPart(part.partId).slot === slot);
+        const free = parts.filter((part) => !part.stationId && getPart(part.partId).slot === slot);
+        return `<div class="hardware-slot" data-hardware-slot="${slot}"><div><strong>${SLOT_LABELS[slot]}</strong><small>${free.length} available</small></div>
+          <p>${installed ? getPart(installed.partId).name : 'Empty slot'}</p>
+          ${installed ? `<button data-hardware-detach="${escapeHtml(installed.id)}">Detach</button>` : ''}
+          ${free.length ? `<select data-hardware-select="${slot}" aria-label="${SLOT_LABELS[slot]} part">${free.map((part) => `<option value="${escapeHtml(part.id)}">${getPart(part.partId).name}</option>`).join('')}</select>
+          <button data-hardware-attach="${slot}">${installed ? 'Replace (old part returns to inventory)' : 'Attach'}</button>` : ''}</div>`;
+      }).join('')}<p class="hardware-error" role="alert">${escapeHtml(this.hardwareError)}</p></section>`;
   }
 }

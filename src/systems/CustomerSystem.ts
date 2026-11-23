@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { BASE_CHECK_IN_SECONDS } from '../data/simulation.ts';
+import { NAVIGATION } from '../data/world-layout.ts';
 import { Customer } from '../entities/Customer.ts';
 import { PlacementSystem } from './PlacementSystem.ts';
 import { EconomySystem } from './EconomySystem.ts';
@@ -17,6 +19,17 @@ export interface ReceptionistStaff {
 }
 
 export class CustomerSystem {
+  public getSpawnInterval: () => number = () => 5;
+  public onCustomerServed?: () => void;
+  private busVisitors = 0;
+  private spawning = false;
+  public queueBusArrival(): void { this.busVisitors = Math.min(6, this.busVisitors + 3); }
+  public getCrossingCount(): number {
+    return [...this.customers.values()].filter((customer) => customer.group.position.z > 12.8 && customer.group.position.z < 18.8).length;
+  }
+  public getStreetCount(): number {
+    return [...this.customers.values()].filter((customer) => customer.group.position.z > NAVIGATION.doorZ).length;
+  }
   private scene: THREE.Scene;
   private placementSystem: PlacementSystem;
   private economySystem: EconomySystem;
@@ -25,6 +38,11 @@ export class CustomerSystem {
   private customers: Map<string, Customer> = new Map();
   // Multi-desk queues (keyed by deskId)
   private deskQueues: Map<string, Customer[]> = new Map();
+  public getCashierMultiplier: () => number = () => 1;
+  private serviceTimers = new Map<string, { customerId: string; elapsed: number }>();
+  private observedLayout = -1;
+  private deskLayouts = new Map<string, string>();
+  private waitTimers = new Map<string, number>();
   private spawnTimer: number = 0;
   private spawnInterval: number = 5.0; // seconds
 
@@ -37,7 +55,9 @@ export class CustomerSystem {
     this.scene = scene;
     this.placementSystem = placementSystem;
     this.economySystem = economySystem;
-    this.collisionSystem = new CollisionSystem(placementSystem);
+    this.collisionSystem = placementSystem.collisionSystem;
+    placementSystem.getCustomerBodies = () => [...this.customers.values()].filter((customer) => customer.state !== 'DESPAWNED')
+      .map((customer) => ({ x: customer.group.position.x, z: customer.group.position.z, stationId: customer.assignedStation?.id }));
   }
 
   public async setupReceptionistForDesk(desk: ReceptionDesk) {
@@ -46,8 +66,9 @@ export class CustomerSystem {
     // If a staff member already exists for this desk, remove it first
     const existing = this.receptionists.get(desk.id);
     if (existing) {
-      this.scene.remove(existing.group);
-      this.receptionists.delete(desk.id);
+      existing.group.position.copy(desk.getStaffPosition());
+      existing.group.rotation.y = desk.group.rotation.y;
+      return;
     }
 
     // Uniformed corporate receptionist model from Women pack
@@ -132,111 +153,78 @@ export class CustomerSystem {
     await this.trySpawnCustomer();
   }
 
-  public update(deltaTime: number) {
-    // Update all receptionist animations
-    for (const staff of this.receptionists.values()) {
-      staff.mixer.update(deltaTime);
-    }
+  public getCheckInSeconds(desk: ReceptionDesk): number {
+    return BASE_CHECK_IN_SECONDS / (desk.currentTier.checkInMultiplier * this.getCashierMultiplier());
+  }
 
-    // Customer spawn tick
-    this.spawnTimer += deltaTime;
-    if (this.spawnTimer >= this.spawnInterval) {
-      this.spawnTimer = 0;
-      this.trySpawnCustomer();
-    }
+  private advanceQueue(desk: ReceptionDesk): void {
+    const queue = this.deskQueues.get(desk.id) ?? [];
+    queue.forEach((customer, index) => customer.moveTo(desk.getCustomerQueuePosition(index), 'WALKING_TO_RECEPTION'));
+    this.serviceTimers.delete(desk.id);
+  }
 
-    // Update active customers
-    for (const customer of this.customers.values()) {
-      customer.update(deltaTime);
-    }
-
-    // Clean up queues for any customer that left or got assigned
-    for (const [deskId, queue] of this.deskQueues.entries()) {
-      const activeQueue = queue.filter(
-        (c) => c.state === 'WALKING_TO_RECEPTION' || c.state === 'WAITING_CHECKIN'
-      );
-      this.deskQueues.set(deskId, activeQueue);
-    }
-
-    // Front-of-line customer check-in for each active reception desk
+  public update(deltaTime: number): void {
+    const layoutChanged = this.observedLayout !== this.placementSystem.layoutRevision;
+    this.observedLayout = this.placementSystem.layoutRevision;
     for (const desk of this.placementSystem.receptionDesks.values()) {
-      const queue = this.deskQueues.get(desk.id) || [];
-      if (queue.length > 0) {
-        const headCustomer = queue[0];
-        if (headCustomer.state === 'WAITING_CHECKIN') {
-          const station = this.placementSystem.getAvailableStation();
-          if (station) {
-            headCustomer.assignedStation = station;
-            station.isOccupied = true;
-            station.currentGamerId = headCustomer.id;
-
-            // Remove served customer from queue
-            queue.shift();
-
-            // Move head customer smoothly to assigned station
-            headCustomer.moveTo(station.getSeatingWorldPosition(), 'WALKING_TO_STATION');
-
-            // Receptionist interaction reaction for this specific desk
-            const staff = this.receptionists.get(desk.id);
-            if (staff && (staff.waveAction || staff.interactAction)) {
-              const action = staff.waveAction || staff.interactAction;
-              action?.reset().setLoop(THREE.LoopOnce, 1).play();
-              setTimeout(() => {
-                staff.idleAction?.reset().fadeIn(0.2).play();
-              }, 1200);
-            }
-
-            // Advance remaining waiting customers forward in queue for this desk
-            for (let i = 0; i < queue.length; i++) {
-              const waitingCust = queue[i];
-              const nextSpot = desk.getCustomerQueuePosition(i);
-              waitingCust.moveTo(nextSpot, 'WALKING_TO_RECEPTION');
-            }
-          }
-        }
+      const staff = this.receptionists.get(desk.id);
+      if (staff) {
+        staff.group.visible = desk.group.visible;
+        staff.group.position.copy(desk.getStaffPosition()); staff.group.rotation.y = desk.group.rotation.y;
+        staff.mixer.update(deltaTime);
+      }
+      const layout = `${desk.gridX}:${desk.gridZ}:${desk.rotationIndex}:${desk.group.visible}`;
+      if (layoutChanged && desk.group.visible) {
+        if (this.deskLayouts.get(desk.id) !== layout) this.advanceQueue(desk);
+        else (this.deskQueues.get(desk.id) ?? []).forEach((customer, index) => {
+          if (customer.state === 'WALKING_TO_RECEPTION') customer.moveTo(desk.getCustomerQueuePosition(index), 'WALKING_TO_RECEPTION');
+        });
+      }
+      this.deskLayouts.set(desk.id, layout);
+    }
+    this.spawnTimer += deltaTime;
+    if (this.spawnTimer >= Math.min(this.spawnInterval, this.busVisitors ? 1 : this.getSpawnInterval())) {
+      this.spawnTimer = 0; void this.trySpawnCustomer();
+    }
+    for (const customer of this.customers.values()) {
+      const queued = customer.state === 'WALKING_TO_RECEPTION' || customer.state === 'WAITING_CHECKIN';
+      if (queued && customer.targetDesk && !customer.targetDesk.group.visible) continue;
+      customer.update(deltaTime);
+      if (customer.state === 'WAITING_CHECKIN') {
+        const waited = (this.waitTimers.get(customer.id) ?? 0) + deltaTime;
+        this.waitTimers.set(customer.id, waited);
+        if (waited > 60) { this.waitTimers.delete(customer.id); customer.leave(); }
       }
     }
-
-    // Soft crowd separation: prevents overlapping when walking or waiting
-    const custList = Array.from(this.customers.values());
-    for (let i = 0; i < custList.length; i++) {
-      for (let j = i + 1; j < custList.length; j++) {
-        const c1 = custList[i];
-        const c2 = custList[j];
-        if (c1.state === 'DESPAWNED' || c2.state === 'DESPAWNED') continue;
-
-        const p1 = c1.group.position;
-        const p2 = c2.group.position;
-        const dx = p1.x - p2.x;
-        const dz = p1.z - p2.z;
-        const distSq = dx * dx + dz * dz;
-        const minDist = 0.50; // 2 x 0.25m character radius
-
-        if (distSq < minDist * minDist && distSq > 0.0001) {
-          const dist = Math.sqrt(distSq);
-          const overlap = (minDist - dist) * 0.35;
-          const nx = dx / dist;
-          const nz = dz / dist;
-          // Sidestep tangential slide: both rotate to their right relative to each other
-          const tx = -nz * 0.35;
-          const tz = nx * 0.35;
-
-          if (c1.state !== 'GAMING') {
-            p1.x += (nx + tx) * overlap;
-            p1.z += (nz + tz) * overlap;
-            this.collisionSystem.resolveCollision(p1, 0.26, c1.assignedStation?.id);
-          }
-          if (c2.state !== 'GAMING') {
-            p2.x -= (nx - tx) * overlap;
-            p2.z -= (nz - tz) * overlap;
-            this.collisionSystem.resolveCollision(p2, 0.26, c2.assignedStation?.id);
-          }
-        }
-      }
+    for (const desk of this.placementSystem.receptionDesks.values()) {
+      const old = this.deskQueues.get(desk.id) ?? [];
+      const queue = old.filter((customer) => ['WALKING_TO_RECEPTION', 'WAITING_CHECKIN'].includes(customer.state));
+      this.deskQueues.set(desk.id, queue);
+      if (!desk.group.visible) continue;
+      if (queue.length !== old.length) this.advanceQueue(desk);
+      const head = queue[0];
+      if (!head || head.state !== 'WAITING_CHECKIN' || desk.isUpgrading) { this.serviceTimers.delete(desk.id); continue; }
+      let timer = this.serviceTimers.get(desk.id);
+      if (!timer || timer.customerId !== head.id) { timer = { customerId: head.id, elapsed: 0 }; this.serviceTimers.set(desk.id, timer); }
+      timer.elapsed += deltaTime;
+      if (timer.elapsed < this.getCheckInSeconds(desk)) continue;
+      const station = [...this.placementSystem.stations.values()].find((candidate) => candidate.group.visible && !candidate.isUpgrading &&
+        !candidate.isOccupied && !candidate.accessIssue && head.pathTo(candidate.getApproachWorldPosition()).length > 0);
+      if (!station) continue;
+      head.assignedStation = station; station.isOccupied = true; station.currentGamerId = head.id;
+      head.moveTo(station.getApproachWorldPosition(), 'WALKING_TO_STATION');
+      queue.shift(); this.waitTimers.delete(head.id);
+      this.advanceQueue(desk);
     }
   }
 
   private async trySpawnCustomer() {
+    if (this.spawning) return;
+    this.spawning = true;
+    try { await this.spawnCustomer(); } finally { this.spawning = false; }
+  }
+
+  private async spawnCustomer() {
     // Only spawn if there is at least one reception counter and at least one gaming station
     if (this.placementSystem.receptionDesks.size === 0 || this.placementSystem.stations.size === 0) {
       return;
@@ -261,7 +249,7 @@ export class CustomerSystem {
     let minQueueLen = Infinity;
     for (const desk of this.placementSystem.receptionDesks.values()) {
       const q = this.deskQueues.get(desk.id) || [];
-      if (q.length < minQueueLen) {
+      if (desk.group.visible && q.length < 3 && q.length < minQueueLen && this.placementSystem.routeTo(desk.getCustomerQueuePosition(q.length)).length) {
         minQueueLen = q.length;
         bestDesk = desk;
       }
@@ -274,8 +262,9 @@ export class CustomerSystem {
 
     // Spawn outside on the exterior city sidewalk
     const isLeft = Math.random() > 0.5;
-    const spawnX = isLeft ? -13.0 : 13.0;
-    const spawnPos = new THREE.Vector3(spawnX, 0.04, 10.5);
+    const fromBus = this.busVisitors > 0;
+    const spawnX = fromBus ? NAVIGATION.busX : isLeft ? NAVIGATION.spawnLeft : NAVIGATION.spawnRight;
+    const spawnPos = new THREE.Vector3(spawnX, 0.04, fromBus ? NAVIGATION.busStopZ : NAVIGATION.sidewalkZ);
 
     customer.collisionSystem = this.collisionSystem;
     customer.gridSystem = this.placementSystem.gridSystem;
@@ -290,12 +279,15 @@ export class CustomerSystem {
     };
     await customer.build(spawnPos);
 
+    if (!bestDesk.group.visible || (this.deskQueues.get(bestDesk.id)?.length ?? 0) >= 3) return;
     this.scene.add(customer.group);
     this.customers.set(id, customer);
+    if (fromBus) this.busVisitors--;
 
     // Revenue callback
     customer.onPayment = (amount, worldPos) => {
       this.economySystem.earn(amount);
+      this.onCustomerServed?.();
       SoundManager.getInstance().playCash();
       if (this.onFloatingText) {
         this.onFloatingText(`+$${amount} 💵`, worldPos, '#10b981');
@@ -312,6 +304,8 @@ export class CustomerSystem {
       }
     };
 
+    customer.onRouteFailed = (cust) => { cust.leave(); };
+
     // Removal callback
     customer.onFinished = (cust) => {
       if (cust.targetDeskId) {
@@ -323,6 +317,7 @@ export class CustomerSystem {
           );
         }
       }
+      this.waitTimers.delete(cust.id);
       this.scene.remove(cust.group);
       this.customers.delete(cust.id);
     };
@@ -336,33 +331,13 @@ export class CustomerSystem {
     this.deskQueues.set(bestDesk.id, q);
 
     const waitSpot = bestDesk.getCustomerQueuePosition(queueIndex);
-
-    // Route from exterior sidewalk -> entrance forecourt (0, 10.5) -> red doorway (0, 8.0) -> inside door (0, 7.0) -> reception queue
-    const arrivalWaypoints: THREE.Vector3[] = [
-      new THREE.Vector3(spawnX * 0.5, 0.04, 10.5),
-      new THREE.Vector3(0, 0.04, 10.5),
-      new THREE.Vector3(0, 0.04, 8.0),
-      new THREE.Vector3(0, 0.04, 7.0)
-    ];
-
-    if (this.placementSystem.gridSystem) {
-      const isBlocked = (p1: THREE.Vector3, p2: THREE.Vector3) =>
-        this.collisionSystem?.isSegmentBlocked(p1, p2, 0.50) ?? false;
-      const insidePath = this.placementSystem.gridSystem.findPath(
-        new THREE.Vector3(0, 0, 7.0),
-        waitSpot,
-        isBlocked
-      );
-      if (insidePath && insidePath.length > 0) {
-        arrivalWaypoints.push(...insidePath);
-      } else {
-        arrivalWaypoints.push(waitSpot.clone());
-      }
-    } else {
-      arrivalWaypoints.push(waitSpot.clone());
-    }
-
-    customer.setWaypoints(arrivalWaypoints, 'WALKING_TO_RECEPTION');
+    const insidePath = this.placementSystem.routeTo(waitSpot);
+    if (!insidePath.length) { customer.leave(); return; }
+    customer.setWaypoints([
+      ...(fromBus ? [new THREE.Vector3(NAVIGATION.doorX, 0, NAVIGATION.busStopZ)] : []),
+      new THREE.Vector3(NAVIGATION.doorX, 0, NAVIGATION.sidewalkZ),
+      new THREE.Vector3(NAVIGATION.doorX, 0, NAVIGATION.doorZ), ...insidePath
+    ], 'WALKING_TO_RECEPTION');
   }
 
   public getActiveCustomerCount(): number {

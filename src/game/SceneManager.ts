@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export class SceneManager {
+  private period = '';
   public scene: THREE.Scene;
   public renderer: THREE.WebGLRenderer;
   public ambientLight: THREE.AmbientLight;
@@ -60,6 +61,20 @@ export class SceneManager {
 
   public render(camera: THREE.Camera) {
     this.renderer.render(this.scene, camera);
+  }
+
+  public setLighting(period: 'day' | 'evening' | 'night'): void {
+    if (period === this.period) return;
+    this.period = period;
+    const colors = { day: 0xabc6c2, evening: 0x566f83, night: 0x17283e };
+    this.scene.background = new THREE.Color(colors[period]);
+    this.scene.fog = new THREE.Fog(colors[period], 90, 160);
+    this.ambientLight.intensity = period === 'day' ? 1.25 : period === 'evening' ? .95 : .65;
+    this.ambientLight.color.setHex(period === 'night' ? 0xa8c9ef : 0xe5ebe2);
+    this.dirLight.intensity = period === 'day' ? 2 : period === 'evening' ? 1.35 : .6;
+    this.dirLight.color.setHex(period === 'day' ? 0xfff1da : period === 'evening' ? 0xffc39b : 0x9db8ed);
+    const shadow = this.dirLight.shadow.camera;
+    shadow.left = shadow.bottom = -38; shadow.right = shadow.top = 38; shadow.far = 130; shadow.updateProjectionMatrix();
   }
 }
 
