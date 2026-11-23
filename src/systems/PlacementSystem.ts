@@ -154,6 +154,11 @@ export class PlacementSystem {
     if (candidate.solids.some((box) => existing.some((entry) => entry.solids.some((other) => overlaps(box, other))))) return 'Furniture bodies cannot overlap.';
     if (this.getCustomerBodies().some((person) => person.stationId !== candidate.id && candidate.solids.some((box) => circleOverlaps(person, CUSTOMER_RADIUS, box)))) return 'A customer is in the way. Wait for them to pass.';
     const proposed = [...existing, candidate];
+    if (candidate.entryPoints) {
+      const query = this.collisionSystem.createNavigationQuery(NAVIGATION_RADIUS, undefined,
+        proposed.flatMap((entry) => entry.solids).filter((box) => box.id !== `${candidate.id}_chair`));
+      if (!candidate.entryPoints.some((point) => !query(new THREE.Vector3(point.x, 0, point.z), new THREE.Vector3(point.x, 0, point.z)))) return 'Keep one side of the chair clear for sitting and standing.';
+    }
     if (candidate.access.some((point) => !this.routeTo(point, proposed).length)) return 'Leave a clear route from the entrance to the chair or all three queue positions.';
     if (candidate.seat && existing.some((entry) => entry.solids.some((box) => circleOverlaps(candidate.seat!, CUSTOMER_RADIUS, box)))) return 'Another object blocks this chair.';
     for (const entry of existing) for (const point of entry.access) {
@@ -171,7 +176,8 @@ export class PlacementSystem {
     for (const station of this.stations.values()) {
       const entry = entries.find((item) => item.id === station.id);
       station.accessIssue = !entry ? 'Being moved' : entry.seat && entries.some((other) => other.id !== entry.id && other.solids.some((box) => circleOverlaps(entry.seat!, CUSTOMER_RADIUS, box)))
-        ? 'Chair blocked by furniture' : !this.routeTo(entry.access[0], entries).length ? 'No clear route to chair' : '';
+        ? 'Chair blocked by furniture' : station.getEntryWorldPositions().every((point) => this.collisionSystem.isPointBlocked(point.x, point.z, NAVIGATION_RADIUS, station.id))
+          ? 'Chair entry sides are blocked' : !this.routeTo(entry.access[0], entries).length ? 'No clear route to chair' : '';
     }
     const blocked = [...this.stations.values()].filter((station) => station.group.visible && station.accessIssue).length;
     this.onValidationChanged?.(blocked ? `${blocked} PC${blocked === 1 ? ' has' : 's have'} blocked chair access. Move nearby furniture to clear a route.` : '');

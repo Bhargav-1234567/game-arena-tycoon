@@ -1,6 +1,7 @@
 # Asset Inventory & Progression Tracker
 
-All models are actual CC0 3D assets from **Kenney** and **Quaternius**.
+The imported equipment/environment records below cover the earlier Kenney and
+Quaternius assets. Current people are original project assets; see Section 5.
 
 ## 1. Gaming PCs (Quaternius Actual Assets)
 | Asset ID | Tier | Name | Pack Source | File Size | Status |
@@ -40,5 +41,20 @@ All models are actual CC0 3D assets from **Kenney** and **Quaternius**.
 | `floor_tile` | Modular | `environment/floors/floor_tile.glb` | Kenney Arcade (`floor.glb`) | 3.9 KB | Active |
 | `wall_straight` | Modular | `environment/walls/wall_straight.glb` | Kenney Arcade (`wall.glb`) | 5.1 KB | Active |
 | `wall_corner` | Modular | `environment/walls/wall_corner.glb` | Kenney Arcade (`wall-corner.glb`) | 7.6 KB | Active |
-| `character_customer` | Character | `characters/character_customer.glb` | Kenney Arcade (`character-gamer.glb`) | 211.9 KB | Active |
-| `character_employee` | Character | `characters/character_employee.glb` | Kenney Arcade (`character-employee.glb`) | 216.5 KB | Active |
+| `character_customer` | Character | `characters/character_customer.glb` | Kenney Arcade (`character-gamer.glb`) | 211.9 KB | Retired from runtime |
+| `character_employee` | Character | `characters/character_employee.glb` | Kenney Arcade (`character-employee.glb`) | 216.5 KB | Retired from runtime |
+
+## 5. Original People
+
+Five customers (`customer_aarav`, `customer_kabir`, `customer_rohan`,
+`customer_meera`, `customer_anaya`) and receptionist `receptionist_isha` are authored
+from original source in `source-assets/characters/create_characters.py`. Runtime
+uses their `_game.glb` versions; the character studio uses the detailed `.glb`
+versions. All 12 files live in `public/assets/models/characters/original/` beside
+a manifest with their exact size, triangle/joint count, animation list and hash.
+Each file includes interchangeable hair, clothes, shoes, glasses, hats, headphones and scarves.
+Female wardrobes also include a wrap blouse and two skirt cuts. The manifest lists every
+module and the maximum visible combination (up to 16,570 triangles per game character).
+
+See [Original Character Upgrade](ORIGINAL_CHARACTERS.md) for the source, preview,
+motion/furniture contracts and validation commands.

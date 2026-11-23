@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { applyCharacterAppearance } from '../characters/CharacterAppearance.ts';
 
 export class AssetManager {
   private static instance: AssetManager;
@@ -31,7 +32,7 @@ export class AssetManager {
   }
 
   public async loadMenAnimations(): Promise<THREE.AnimationClip[]> {
-    const animUrl = '/assets/models/characters/men/Man.glb';
+    const animUrl = '/assets/models/characters/original/customer_aarav_game.glb';
     if (!this.animationsCache.has(animUrl)) {
       await this.loadModel(animUrl);
     }
@@ -39,7 +40,7 @@ export class AssetManager {
   }
 
   public async loadWomenAnimations(): Promise<THREE.AnimationClip[]> {
-    const animUrl = '/assets/models/characters/women/Woman.glb';
+    const animUrl = '/assets/models/characters/original/customer_meera_game.glb';
     if (!this.animationsCache.has(animUrl)) {
       await this.loadModel(animUrl);
     }
@@ -105,6 +106,7 @@ export class AssetManager {
         url,
         (gltf) => {
           const model = gltf.scene;
+          if (model.userData.customHuman?.defaultAppearance) applyCharacterAppearance(model, model.userData.customHuman.defaultAppearance);
           if (gltf.animations && gltf.animations.length > 0) {
             this.animationsCache.set(url, gltf.animations);
             model.userData.animations = gltf.animations;

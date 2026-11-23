@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
+import { CHAIR_ENTRY_SIDE, CHAIR_ENTRY_FORWARD } from '../data/simulation.ts';
 import { pcUpgrades, type PCUpgrade } from '../data/pc-upgrades.ts';
 import { chairUpgrades, type ChairUpgrade } from '../data/chair-upgrades.ts';
 import { monitorUpgrades, type MonitorUpgrade } from '../data/monitor-upgrades.ts';
@@ -381,6 +382,11 @@ export class GamingStation {
     const localSeat = new THREE.Vector3(0, 0.18, chairZ);
     localSeat.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(localSeat);
+  }
+
+  public getEntryWorldPositions(): THREE.Vector3[] {
+    return [-1, 1].map((side) => this.group.position.clone().add(new THREE.Vector3(side * CHAIR_ENTRY_SIDE, 0,
+      this.computedChairZ + CHAIR_ENTRY_FORWARD).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y)));
   }
 
   public update(time: number) {

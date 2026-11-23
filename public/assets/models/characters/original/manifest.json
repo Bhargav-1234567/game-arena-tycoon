@@ -1,0 +1,1374 @@
+{
+  "generator": "source-assets/characters/create_characters.py",
+  "original": true,
+  "characters": [
+    {
+      "id": "customer_aarav",
+      "file": "public/assets/models/characters/original/customer_aarav.glb",
+      "height": 1.74,
+      "triangles": 93160,
+      "maxActiveTriangles": 42664,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 16832
+        },
+        "top": {
+          "polo": 3052,
+          "tshirt": 2920,
+          "raglan": 2920,
+          "hoodie": 4008,
+          "overshirt": 4284,
+          "blazer": 4000
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 384,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "quiff": 4500,
+          "curls": 12708,
+          "bun": 4812
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 4120472,
+      "sha256": "aba7e55eb2ad650b30c92a8c7f6ab62cf273c181fcc1ca0b3f3a95b5bf663eeb",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_aarav_game",
+      "file": "public/assets/models/characters/original/customer_aarav_game.glb",
+      "height": 1.74,
+      "triangles": 35870,
+      "maxActiveTriangles": 15514,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 5506
+        },
+        "top": {
+          "polo": 1144,
+          "tshirt": 1072,
+          "raglan": 1072,
+          "hoodie": 1630,
+          "overshirt": 1740,
+          "blazer": 1644
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 208,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "quiff": 1736,
+          "curls": 4448,
+          "bun": 1826
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 1876300,
+      "sha256": "dab128b598e32836490c2fb38f59c3b3a48e6f20ab0c9542de8600a83cb914e8",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_kabir",
+      "file": "public/assets/models/characters/original/customer_kabir.glb",
+      "height": 1.8,
+      "triangles": 93160,
+      "maxActiveTriangles": 42664,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 16832
+        },
+        "top": {
+          "polo": 3052,
+          "tshirt": 2920,
+          "raglan": 2920,
+          "hoodie": 4008,
+          "overshirt": 4284,
+          "blazer": 4000
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 384,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "quiff": 4500,
+          "curls": 12708,
+          "bun": 4812
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 4120504,
+      "sha256": "4e09e6402c4135f752d60f201c092433ce946cb6af608de59a6780486da7b78c",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_kabir_game",
+      "file": "public/assets/models/characters/original/customer_kabir_game.glb",
+      "height": 1.8,
+      "triangles": 35870,
+      "maxActiveTriangles": 15514,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 5506
+        },
+        "top": {
+          "polo": 1144,
+          "tshirt": 1072,
+          "raglan": 1072,
+          "hoodie": 1630,
+          "overshirt": 1740,
+          "blazer": 1644
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 208,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "quiff": 1736,
+          "curls": 4448,
+          "bun": 1826
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 1876280,
+      "sha256": "c847d21eda4cd99d6f8d3dff925ac96d1fa4f7294af19d58f1062f5bd3f8bdd3",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_rohan",
+      "file": "public/assets/models/characters/original/customer_rohan.glb",
+      "height": 1.69,
+      "triangles": 93160,
+      "maxActiveTriangles": 42664,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 16832
+        },
+        "top": {
+          "polo": 3052,
+          "tshirt": 2920,
+          "raglan": 2920,
+          "hoodie": 4008,
+          "overshirt": 4284,
+          "blazer": 4000
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 384,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "quiff": 4500,
+          "curls": 12708,
+          "bun": 4812
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 4120516,
+      "sha256": "62f938e7c54994bcd00e27b1390c001ae85a9b0e0512917686ff8a723948f387",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_rohan_game",
+      "file": "public/assets/models/characters/original/customer_rohan_game.glb",
+      "height": 1.69,
+      "triangles": 35870,
+      "maxActiveTriangles": 15514,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "quiff",
+          "curls",
+          "bun"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 5506
+        },
+        "top": {
+          "polo": 1144,
+          "tshirt": 1072,
+          "raglan": 1072,
+          "hoodie": 1630,
+          "overshirt": 1740,
+          "blazer": 1644
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 208,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "quiff": 1736,
+          "curls": 4448,
+          "bun": 1826
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 1876284,
+      "sha256": "1eb1e3997ae59a6f45546009495fb73d43f69e7ad2dca700b96ef389e3fad955",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_meera",
+      "file": "public/assets/models/characters/original/customer_meera.glb",
+      "height": 1.67,
+      "triangles": 115268,
+      "maxActiveTriangles": 44512,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 17912
+        },
+        "top": {
+          "polo": 3532,
+          "tshirt": 3404,
+          "raglan": 3404,
+          "hoodie": 4584,
+          "overshirt": 4764,
+          "blazer": 4576,
+          "wrap_blouse": 3832
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688,
+          "a_line_skirt": 1520,
+          "pleated_skirt": 1712
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 672,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "curls": 12708,
+          "bob": 3636,
+          "ponytail": 3972,
+          "bun": 4812,
+          "braid": 7488
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 5034724,
+      "sha256": "55c4bb15bb9abf4484d044d1d012064511694d9855d3aa576d9c57ff59a3f33b",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_meera_game",
+      "file": "public/assets/models/characters/original/customer_meera_game.glb",
+      "height": 1.67,
+      "triangles": 45288,
+      "maxActiveTriangles": 16426,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 5986
+        },
+        "top": {
+          "polo": 1360,
+          "tshirt": 1292,
+          "raglan": 1292,
+          "hoodie": 1918,
+          "overshirt": 1956,
+          "blazer": 1924,
+          "wrap_blouse": 1592
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272,
+          "a_line_skirt": 756,
+          "pleated_skirt": 1092
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 424,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "curls": 4448,
+          "bob": 1424,
+          "ponytail": 1578,
+          "bun": 1826,
+          "braid": 2576
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 2290732,
+      "sha256": "3c22bc2e24010ff01db03396482fa76d274b44b2f500a8046f8d2afcd443d878",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_anaya",
+      "file": "public/assets/models/characters/original/customer_anaya.glb",
+      "height": 1.71,
+      "triangles": 115268,
+      "maxActiveTriangles": 44512,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 17912
+        },
+        "top": {
+          "polo": 3532,
+          "tshirt": 3404,
+          "raglan": 3404,
+          "hoodie": 4584,
+          "overshirt": 4764,
+          "blazer": 4576,
+          "wrap_blouse": 3832
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688,
+          "a_line_skirt": 1520,
+          "pleated_skirt": 1712
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 672,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "curls": 12708,
+          "bob": 3636,
+          "ponytail": 3972,
+          "bun": 4812,
+          "braid": 7488
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 5034768,
+      "sha256": "869e80dd586e432fa3dc4e325d22d71010c1273faf6b42393b6c3cadc781142e",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "customer_anaya_game",
+      "file": "public/assets/models/characters/original/customer_anaya_game.glb",
+      "height": 1.71,
+      "triangles": 45288,
+      "maxActiveTriangles": 16426,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 5986
+        },
+        "top": {
+          "polo": 1360,
+          "tshirt": 1292,
+          "raglan": 1292,
+          "hoodie": 1918,
+          "overshirt": 1956,
+          "blazer": 1924,
+          "wrap_blouse": 1592
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272,
+          "a_line_skirt": 756,
+          "pleated_skirt": 1092
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 424,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "curls": 4448,
+          "bob": 1424,
+          "ponytail": 1578,
+          "bun": 1826,
+          "braid": 2576
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 2290720,
+      "sha256": "6058516ed1b9150c5704e951dce4c71576cfd03b9227813ce59211e59b3bbc4a",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "receptionist_isha",
+      "file": "public/assets/models/characters/original/receptionist_isha.glb",
+      "height": 1.69,
+      "triangles": 115700,
+      "maxActiveTriangles": 44944,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 18344
+        },
+        "top": {
+          "polo": 3532,
+          "tshirt": 3404,
+          "raglan": 3404,
+          "hoodie": 4584,
+          "overshirt": 4764,
+          "blazer": 4576,
+          "wrap_blouse": 3832
+        },
+        "bottoms": {
+          "jeans": 2308,
+          "chinos": 2128,
+          "joggers": 2308,
+          "shorts": 2688,
+          "a_line_skirt": 1520,
+          "pleated_skirt": 1712
+        },
+        "shoes": {
+          "sneakers": 2192,
+          "high_tops": 2608,
+          "boots": 2608,
+          "loafers": 2048
+        },
+        "headwear": {
+          "baseball_cap": 1104,
+          "beanie": 648,
+          "headphones": 2216
+        },
+        "neckwear": {
+          "knit_scarf": 672,
+          "neckerchief": 196
+        },
+        "hair": {
+          "crop": 3636,
+          "side_part": 4740,
+          "curls": 12708,
+          "bob": 3636,
+          "ponytail": 3972,
+          "bun": 4812,
+          "braid": 7488
+        },
+        "glasses": {
+          "square": 368,
+          "round": 944
+        }
+      },
+      "joints": 29,
+      "bytes": 5053332,
+      "sha256": "bdfe1d238b0735772303a11461d2a7dd650a31420b65e373ae85a7167c1efca7",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    },
+    {
+      "id": "receptionist_isha_game",
+      "file": "public/assets/models/characters/original/receptionist_isha_game.glb",
+      "height": 1.69,
+      "triangles": 45432,
+      "maxActiveTriangles": 16570,
+      "appearanceOptions": {
+        "hair": [
+          "crop",
+          "side_part",
+          "curls",
+          "bob",
+          "ponytail",
+          "bun",
+          "braid"
+        ],
+        "top": [
+          "polo",
+          "tshirt",
+          "raglan",
+          "hoodie",
+          "overshirt",
+          "blazer",
+          "wrap_blouse"
+        ],
+        "bottoms": [
+          "jeans",
+          "chinos",
+          "joggers",
+          "shorts",
+          "a_line_skirt",
+          "pleated_skirt"
+        ],
+        "shoes": [
+          "sneakers",
+          "high_tops",
+          "boots",
+          "loafers"
+        ],
+        "glasses": [
+          "none",
+          "square",
+          "round"
+        ],
+        "headwear": [
+          "none",
+          "baseball_cap",
+          "beanie",
+          "headphones"
+        ],
+        "neckwear": [
+          "none",
+          "knit_scarf",
+          "neckerchief"
+        ]
+      },
+      "slotTriangles": {
+        "body": {
+          "base": 6130
+        },
+        "top": {
+          "polo": 1360,
+          "tshirt": 1292,
+          "raglan": 1292,
+          "hoodie": 1918,
+          "overshirt": 1956,
+          "blazer": 1924,
+          "wrap_blouse": 1592
+        },
+        "bottoms": {
+          "jeans": 1228,
+          "chinos": 1012,
+          "joggers": 1228,
+          "shorts": 1272,
+          "a_line_skirt": 756,
+          "pleated_skirt": 1092
+        },
+        "shoes": {
+          "sneakers": 780,
+          "high_tops": 972,
+          "boots": 972,
+          "loafers": 636
+        },
+        "headwear": {
+          "baseball_cap": 420,
+          "beanie": 288,
+          "headphones": 660
+        },
+        "neckwear": {
+          "knit_scarf": 424,
+          "neckerchief": 88
+        },
+        "hair": {
+          "crop": 1424,
+          "side_part": 1880,
+          "curls": 4448,
+          "bob": 1424,
+          "ponytail": 1578,
+          "bun": 1826,
+          "braid": 2576
+        },
+        "glasses": {
+          "square": 276,
+          "round": 708
+        }
+      },
+      "joints": 29,
+      "bytes": 2298064,
+      "sha256": "e204df5df95148aea650095d9d5d9a7976d7382349eb6e41d2d19a9e68b00282",
+      "clips": [
+        "Idle",
+        "Walk",
+        "SitDown",
+        "Gaming",
+        "StandUp",
+        "Wave",
+        "CheckIn"
+      ]
+    }
+  ]
+}

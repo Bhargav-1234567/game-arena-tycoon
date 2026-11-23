@@ -1,3 +1,4 @@
+import { ORIGINAL_CHARACTERS } from '../data/characters.ts';
 import { SECONDS_PER_GAME_HOUR } from '../data/simulation.ts';
 import * as THREE from 'three';
 import { SceneManager } from './SceneManager.ts';
@@ -271,15 +272,8 @@ export class Game {
       '/assets/models/furniture/sofas/sofa_lvl2.glb',
       '/assets/models/furniture/sofas/sofa_lvl3.glb',
       '/assets/models/furniture/sofas/sofa_lvl4.glb',
-      // Characters & Animation Suite
-      '/assets/models/characters/women/Woman.glb',
-      '/assets/models/characters/women/Woman in Dress.glb',
-      '/assets/models/characters/women/Woman Casual.glb',
-      '/assets/models/characters/women/Woman in Tank Top.glb',
-      '/assets/models/characters/men/Man.glb',
-      '/assets/models/characters/men/Man in Long Sleeves.glb',
-      '/assets/models/characters/men/Man in Suit.glb',
-      '/assets/models/characters/men/Man-fjHyMd5Wxw.glb',
+      // Original in-house meshes, rigs, textures and animation clips.
+      ...ORIGINAL_CHARACTERS.map((character) => character.gamePath),
       // Exterior City Environment & Vehicles
       '/assets/models/environment/city/Big Building.glb',
       '/assets/models/environment/city/Building Green.glb',
@@ -290,12 +284,6 @@ export class Game {
       '/assets/models/environment/city/Sports Car.glb',
       '/assets/models/environment/city/SUV.glb',
       '/assets/models/environment/city/Police Car.glb'
-    ]);
-
-    // Ensure both Men and Women character animation suites are ready
-    await Promise.all([
-      assetMgr.loadMenAnimations(),
-      assetMgr.loadWomenAnimations()
     ]);
 
     // 2. Build Floor Grid

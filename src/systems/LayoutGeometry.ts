@@ -1,7 +1,7 @@
 import { CHAIR_DIMS, DESK_SURFACES } from '../entities/GamingStation.ts';
 import type { BuildableItem } from '../data/assets.ts';
 import type { WorldBounds } from '../data/world-layout.ts';
-import { NAVIGATION_RADIUS } from '../data/simulation.ts';
+import { NAVIGATION_RADIUS, CHAIR_ENTRY_SIDE, CHAIR_ENTRY_FORWARD } from '../data/simulation.ts';
 
 export interface LayoutPoint { x: number; z: number; }
 export interface LayoutObstacle extends WorldBounds { id: string; type: 'desk' | 'chair' | 'reception' | 'facility' | 'decor' | 'wall'; }
@@ -12,6 +12,7 @@ export interface PlacementGeometry {
   solids: LayoutObstacle[];
   access: LayoutPoint[];
   seat?: LayoutPoint;
+  entryPoints?: LayoutPoint[];
   center: LayoutPoint;
 }
 export const overlaps = (a: WorldBounds, b: WorldBounds) => a.minX < b.maxX - .001 && a.maxX > b.minX + .001 && a.minZ < b.maxZ - .001 && a.maxZ > b.minZ + .001;
@@ -44,6 +45,7 @@ export function geometryFor(item: BuildableItem, gridX: number, gridZ: number, r
     box({ minX: -.8, maxX: .8, minZ: -.45, maxZ: .45 }, 'desk', '_desk');
     box({ minX: -chair.w / 2 - .02, maxX: chair.w / 2 + .02, minZ: chairZ - chair.d / 2 - .02, maxZ: chairZ + chair.d / 2 + .02 }, 'chair', '_chair');
     result.seat = rotatedPoint(center, 0, chairZ - .08, rotation);
+    result.entryPoints = [-1, 1].map((side) => rotatedPoint(center, side * CHAIR_ENTRY_SIDE, chairZ + CHAIR_ENTRY_FORWARD, rotation));
     result.access = [rotatedPoint(center, 0, chairZ + chair.d / 2 + NAVIGATION_RADIUS + .10, rotation)];
   } else if (item.id.startsWith('reception')) {
     result.reserved = rotatedBox(center, { minX: -2, maxX: 2, minZ: -2.5, maxZ: 1.5 }, rotation);

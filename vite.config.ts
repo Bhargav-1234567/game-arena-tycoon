@@ -9,7 +9,8 @@ export default defineConfig({
     allowedHosts: ["statute-morse-stowing.ngrok-free.dev"]
   },
   build: {
-    target: 'esnext'
+    target: 'esnext',
+    rollupOptions: { input: { game: 'index.html', characters: 'custom-characters.html' } }
   }
 });
 

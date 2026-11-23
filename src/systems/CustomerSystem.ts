@@ -1,3 +1,5 @@
+import { RECEPTIONIST_CHARACTER } from '../data/characters.ts';
+import { applyCharacterAppearance, randomCharacterAppearance } from '../characters/CharacterAppearance.ts';
 import * as THREE from 'three';
 import { BASE_CHECK_IN_SECONDS } from '../data/simulation.ts';
 import { NAVIGATION } from '../data/world-layout.ts';
@@ -48,6 +50,7 @@ export class CustomerSystem {
 
   // Multi-Receptionist Registry (keyed by deskId)
   public receptionists: Map<string, ReceptionistStaff> = new Map();
+  private receptionistLoads = new Map<string, Promise<void>>();
 
   public onFloatingText?: (text: string, worldPos: THREE.Vector3, color?: string) => void;
 
@@ -60,7 +63,20 @@ export class CustomerSystem {
       .map((customer) => ({ x: customer.group.position.x, z: customer.group.position.z, stationId: customer.assignedStation?.id }));
   }
 
-  public async setupReceptionistForDesk(desk: ReceptionDesk) {
+  public setupReceptionistForDesk(desk: ReceptionDesk): Promise<void> {
+    const existing = this.receptionists.get(desk.id);
+    if (existing) {
+      existing.group.position.copy(desk.getStaffPosition()); existing.group.rotation.y = desk.group.rotation.y;
+      return Promise.resolve();
+    }
+    const pending = this.receptionistLoads.get(desk.id);
+    if (pending) return pending;
+    const loading = this.createReceptionistForDesk(desk).finally(() => { this.receptionistLoads.delete(desk.id); });
+    this.receptionistLoads.set(desk.id, loading);
+    return loading;
+  }
+
+  private async createReceptionistForDesk(desk: ReceptionDesk) {
     const assetMgr = AssetManager.getInstance();
 
     // If a staff member already exists for this desk, remove it first
@@ -71,9 +87,9 @@ export class CustomerSystem {
       return;
     }
 
-    // Uniformed corporate receptionist model from Women pack
-    const receptionistModel = await assetMgr.loadModel('/assets/models/characters/women/Woman in Dress.glb');
-    receptionistModel.scale.setScalar(0.30);
+    // Original uniform, face and gesture rig, authored in metres.
+    const receptionistModel = await assetMgr.loadRequiredModel(RECEPTIONIST_CHARACTER.gamePath);
+    applyCharacterAppearance(receptionistModel, randomCharacterAppearance(RECEPTIONIST_CHARACTER.gender, 'receptionist'));
 
     receptionistModel.traverse((child) => {
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
@@ -92,13 +108,7 @@ export class CustomerSystem {
     staffGroup.rotation.y = desk.group.rotation.y;
     this.scene.add(staffGroup);
 
-    // Setup animations: prioritize model's own native animations (matching its exact skeleton and bind pose)
-    let animations = (receptionistModel.userData.animations as THREE.AnimationClip[]) || [];
-    if (!animations || animations.length === 0) {
-      const fallbackClips = await assetMgr.loadWomenAnimations();
-      animations = fallbackClips.map((c) => assetMgr.sanitizeClip(c, false));
-    }
-
+    const animations = (receptionistModel.userData.animations as THREE.AnimationClip[]) ?? [];
     let mixer: THREE.AnimationMixer | undefined;
     let idleAction: THREE.AnimationAction | undefined;
     let waveAction: THREE.AnimationAction | undefined;
@@ -118,13 +128,18 @@ export class CustomerSystem {
         animations[0];
       const clapClip = animations.find((a) => a.name.toLowerCase().includes('clap'));
       const waveClip = animations.find((a) => a.name.toLowerCase().includes('wave')) || clapClip;
-      const interactClip = animations.find((a) => a.name.toLowerCase().includes('interact')) || clapClip;
+      const interactClip = animations.find((a) => a.name === 'CheckIn') || clapClip;
 
       if (idleClip) idleAction = mixer.clipAction(idleClip);
       if (waveClip) waveAction = mixer.clipAction(waveClip);
       if (interactClip) interactAction = mixer.clipAction(interactClip);
 
       idleAction?.play();
+      mixer.addEventListener('finished', (event) => {
+        if (event.action === waveAction || event.action === interactAction) {
+          event.action.fadeOut(.15); idleAction?.reset().fadeIn(.15).play();
+        }
+      });
     }
 
     if (mixer) {
@@ -221,7 +236,9 @@ export class CustomerSystem {
   private async trySpawnCustomer() {
     if (this.spawning) return;
     this.spawning = true;
-    try { await this.spawnCustomer(); } finally { this.spawning = false; }
+    try { await this.spawnCustomer(); }
+    catch (error) { console.warn('An original customer could not be prepared; arrival will retry.', error); }
+    finally { this.spawning = false; }
   }
 
   private async spawnCustomer() {
@@ -297,6 +314,13 @@ export class CustomerSystem {
     // Customer check-in greeting callback (specific to assigned desk's receptionist)
     customer.onCheckIn = (cust) => {
       SoundManager.getInstance().playClick();
+      const receptionist = cust.targetDeskId ? this.receptionists.get(cust.targetDeskId) : undefined;
+      const gesture = receptionist?.interactAction ?? receptionist?.waveAction;
+      if (gesture) {
+        receptionist?.idleAction?.fadeOut(.15);
+        gesture.reset().setLoop(THREE.LoopOnce, 1).fadeIn(.15).play();
+        gesture.clampWhenFinished = true;
+      }
       const staff = cust.targetDeskId ? this.receptionists.get(cust.targetDeskId) : this.receptionists.values().next().value;
       if (staff && this.onFloatingText) {
         const greetPos = staff.group.position.clone().add(new THREE.Vector3(0, 2.0, 0));

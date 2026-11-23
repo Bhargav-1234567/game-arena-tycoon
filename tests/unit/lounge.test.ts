@@ -15,6 +15,7 @@ import { BUILDABLE_ITEMS } from '../../src/data/assets.ts';
 import { ROOM_FOOTPRINTS } from '../../src/data/world-layout.ts';
 import { pcUpgrades } from '../../src/data/pc-upgrades.ts';
 import { AssetManager } from '../../src/services/AssetManager.ts';
+import { chairUpgrades } from '../../src/data/chair-upgrades.ts';
 
 const item = (id: string) => BUILDABLE_ITEMS.find((entry) => entry.id === id)!;
 function setup() {
@@ -198,7 +199,8 @@ test('L19: session billing follows the displayed clock and pays exactly once', (
   const start = economy.timeMinutes; economy.update(20); customer.finishSession(); customer.finishSession();
   assert.deepEqual(payments, [Math.round(station.getHourlyRevenue() * (economy.timeMinutes - start) / 60)]);
   assert.equal(customer.state, 'UNSEATING'); assert.equal(station.isOccupied, true);
-  customer.update(.7); assert.equal(station.isOccupied, false);
+  customer.update(.7); assert.equal(station.isOccupied, true);
+  customer.update(1.3); assert.equal(station.isOccupied, false);
 });
 
 test('building unrelated furniture does not restart a waiting customer\'s service timer', () => {
@@ -236,4 +238,26 @@ test('failed placement model preparation retains cash and creates no partial ent
     assert.equal(economy.cash, cash); assert.equal(placement.stations.size, 0); assert.equal(placement.busy, false);
     assert.match(placement.validationMessage, /cash has been kept/);
   } finally { manager.loadModel = original; }
+});
+
+test('chair entry and exit choose a clear side and keep the customer inside perimeter walls in every rotation', () => {
+  for (const [x, z, rotation] of [[-6, 0, 0], [-6, -2, 1], [3, 5, 2], [5, 1, 3]]) {
+    const { placement, grid, collision } = setup(), station = stationAt(placement, x, z, rotation);
+    station.currentChair = chairUpgrades[3]; station.updateLayout(); placement.refreshLayout();
+    const customer = new Customer(`edge_${rotation}`); customer.gridSystem = grid; customer.collisionSystem = collision;
+    customer.assignedStation = station; station.isOccupied = true; station.currentGamerId = customer.id;
+    customer.group.position.copy(station.getApproachWorldPosition());
+    customer.moveTo(station.getApproachWorldPosition(), 'WALKING_TO_STATION'); customer.update(1 / 60);
+    for (let frame = 0; frame < 150 && customer.state !== 'GAMING'; frame++) {
+      customer.update(1 / 60);
+      assert.equal(collision.isOutsideWorld(customer.group.position.x, customer.group.position.z, .28), false, `entry rotation ${rotation}`);
+    }
+    assert.equal(customer.state, 'GAMING'); assert.ok(customer.group.position.distanceTo(station.getSeatingWorldPosition()) < .001);
+    customer.finishSession();
+    for (let frame = 0; frame < 150 && customer.state === 'UNSEATING'; frame++) {
+      customer.update(1 / 60);
+      assert.equal(collision.isOutsideWorld(customer.group.position.x, customer.group.position.z, .28), false, `exit rotation ${rotation}`);
+    }
+    assert.equal(customer.state, 'LEAVING'); assert.equal(station.isOccupied, false);
+  }
 });

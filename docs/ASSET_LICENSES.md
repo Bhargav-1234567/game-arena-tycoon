@@ -1,12 +1,28 @@
 # Asset Licenses & Attribution Log
 
+## Original characters
+
+The active customers, receptionist and street pedestrians use original project
+assets under `public/assets/models/characters/original/`. All human geometry,
+rigging, skin weights, procedural face/fabric textures and seven animation clips
+are authored in `source-assets/characters/create_characters.py`; no third-party
+human mesh, rig, motion or texture is incorporated into this family. See
+[`ORIGINAL_CHARACTERS.md`](ORIGINAL_CHARACTERS.md) and the generated manifest for
+the two detail versions of all six fictional identities and reproducible hashes.
+The same generator authors all wardrobe items, including the caps, beanies,
+headphones, scarves, wrap blouse, A-line skirt and pleated skirt. Instance colour palettes
+and random wardrobe selection use original project code in `CharacterAppearance.ts`.
+
+## Earlier assets and imported environment
+
 The interface favicon at `public/favicon.svg` is original SVG artwork created for this repository. It uses no third-party images, fonts, or asset packs.
 
 Puzzle component silhouettes and hazard styling in `src/puzzle/presentation.ts` and `src/puzzle.css` are adapted from the user-provided local Build & Boot project's `Home.razor.cs` and `wwwroot/css/app.css`. Level/build descriptions and tips are synchronized from its `GameCatalog.cs`. These are local project sources; no external image, font or asset pack was downloaded for the puzzle artwork.
 
 The Pixel District storefronts, roofs, signs, streets, trees, plaza, lighting fixtures and map controls are original procedural geometry, Canvas text and CSS. Imported neighborhood buildings, cars, bus and bicycle reuse the existing city GLB files under `public/assets/models/environment/city/`; no new external asset pack was downloaded for this feature. Existing source/license records still apply; the procedural additions do not independently verify the provenance of imported files.
 
-All 3D models integrated into the game are verified **CC0 / Free Commercial Use** assets sourced directly from established game asset creators (**Kenney** and **Quaternius**), adhering to the commercial-use checklist in Section 5 of the Blueprint.
+The historical imported-asset records below identify assets sourced from **Kenney**
+and **Quaternius**. They do not describe the new original character family.
 
 | Asset ID | File | Creator / Source | Original Pack | License | Attribution Required | Download Date |
 |---|---|---|---|---|---|---|

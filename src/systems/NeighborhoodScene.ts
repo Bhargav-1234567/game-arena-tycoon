@@ -1,3 +1,5 @@
+import { CUSTOMER_CHARACTERS } from '../data/characters.ts';
+import { applyCharacterAppearance, randomCharacterAppearance } from '../characters/CharacterAppearance.ts';
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
 import { DISTRICT_PLACES, NAVIGATION, RESERVED_PROPERTY } from '../data/world-layout.ts';
@@ -206,12 +208,12 @@ export class NeighborhoodScene {
   }
 
   private async initWalkers(): Promise<void> {
-    for (const [name, minX, maxX, z] of [['Man in Long Sleeves', -14, -3, 11.6], ['Woman Casual', 3, 14, 11.6], ['Woman in Tank Top', -10, 4, 20]] as const) {
-      const model = await AssetManager.getInstance().loadModel(`/assets/models/characters/${name.startsWith('Man') ? 'men' : 'women'}/${name}.glb`);
-      model.scale.setScalar(.3);
+    for (const [index, minX, maxX, z] of [[0, -14, -3, 11.6], [3, 3, 14, 11.6], [4, -10, 4, 20]] as const) {
+      const model = await AssetManager.getInstance().loadRequiredModel(CUSTOMER_CHARACTERS[index].gamePath);
+      applyCharacterAppearance(model, randomCharacterAppearance(CUSTOMER_CHARACTERS[index].gender));
       const wrapper = new THREE.Group(); wrapper.add(model); wrapper.position.set(minX, .04, z); wrapper.rotation.y = Math.PI / 2; this.group.add(wrapper);
       const clips = (model.userData.animations as THREE.AnimationClip[]) ?? [], mixer = clips.length ? new THREE.AnimationMixer(model) : undefined;
-      if (mixer) mixer.clipAction(clips.find((clip) => /walk/i.test(clip.name)) ?? clips[0]).play();
+      if (mixer) { const walk = mixer.clipAction(clips.find((clip) => clip.name === 'Walk')!); walk.timeScale = .9 / model.userData.customHuman.walkSpeed; walk.play(); }
       this.walkers.push({ group: wrapper, mixer, minX, maxX, speed: .9, direction: 1 });
     }
   }
