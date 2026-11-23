@@ -12,6 +12,7 @@ export const ROOM_FOOTPRINTS: WorldBounds[] = [
 ];
 export const RESERVED_PROPERTY = ROOM_FOOTPRINTS[6];
 export const DISTRICT_BOUNDS: WorldBounds = { minX: -30, maxX: 30, minZ: -22, maxZ: 32 };
+export const BUS_PASSENGERS = 12;
 export const NAVIGATION = {
   doorX: 0, doorZ: 8, insideZ: 7, sidewalkZ: 10.5,
   spawnLeft: -13, spawnRight: 13, exitLeft: -15, exitRight: 15,

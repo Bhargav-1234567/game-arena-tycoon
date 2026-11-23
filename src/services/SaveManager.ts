@@ -1,3 +1,6 @@
+import { STAFF_ROLES, validateWorkforce } from '../data/employees.ts';
+import type { SavedWorkforce } from '../data/employees.ts';
+import type { ShiftResult } from '../systems/LoungeOperations.ts';
 import { WorkshopSystem, newWorkshopState } from '../systems/WorkshopSystem.ts';
 import type { WorkshopState } from '../systems/WorkshopSystem.ts';
 import { NeighborhoodSystem } from '../systems/NeighborhoodSystem.ts';
@@ -8,6 +11,7 @@ export interface SavedStationData {
   gridX: number;
   gridZ: number;
   rotationIndex: number;
+  sessionsSinceService?: number;
   pcLevel: number;
   chairLevel: number;
   monitorLevel: number;
@@ -18,6 +22,8 @@ export interface SavedStationData {
 }
 
 export interface SavedFacilityData {
+  salesSinceRefill?: number;
+  playsSinceService?: number;
   id: string;
   itemId: string;
   gridX: number;
@@ -48,6 +54,10 @@ export interface SavedObjectData {
 }
 
 export interface GameSaveState {
+  workforce?: SavedWorkforce;
+  receptionist?: { x: number; z: number };
+  shift?: ShiftResult;
+  previousShift?: ShiftResult;
   version: number;
   timestamp: number;
   economy: {
@@ -142,6 +152,14 @@ function validateSave(state: GameSaveState): void {
     (state.expansionCount !== undefined && !whole(state.expansionCount, 0, 6))) {
     throw new Error('Invalid game save. Your existing save has been kept.');
   }
+  for (const result of [state.shift, state.previousShift]) {
+    if (result !== undefined && (!result || !whole(result.day, 1, state.economy.day) ||
+      !finite(result.waitSeconds, 0, Number.MAX_SAFE_INTEGER) ||
+      !finite(result.downtime ?? 0, 0, Number.MAX_SAFE_INTEGER) ||
+      [result.wages ?? 0,result.jobs ?? 0,result.served,result.lost,result.waitSamples,result.pc,result.vending,result.arcade].some(v => !whole(v,0,Number.MAX_SAFE_INTEGER)))) throw new Error('Invalid shift totals.');
+  }
+  if (state.receptionist !== undefined && (!state.receptionist || !finite(state.receptionist.x,-100,100) ||
+    !finite(state.receptionist.z,-100,100))) throw new Error('Invalid receptionist position.');
   const ids = new Set<string>();
   const placement = (entry: { id: string; gridX: number; gridZ: number; rotationIndex: number }) => {
     if (!entry || !identifier(entry.id) || ids.has(entry.id) || !finite(entry.gridX, -100, 100) ||
@@ -150,21 +168,25 @@ function validateSave(state: GameSaveState): void {
   };
   for (const station of state.stations) {
     placement(station);
+    if (!whole(station.sessionsSinceService ?? 0,0,4)) throw new Error('Invalid PC condition.');
     if ([station.pcLevel, station.chairLevel, station.monitorLevel, station.deskLevel,
       station.keyboardLevel, station.mouseLevel, station.speakerLevel].some((level) => !whole(level, 1, 4))) throw new Error('Invalid saved PC tier.');
   }
   for (const facility of state.facilities) {
     placement(facility);
+    if (!whole(facility.salesSinceRefill ?? 0,0,2+2*(facility.level ?? 1)) ||
+      !whole(facility.playsSinceService ?? 0,0,3)) throw new Error('Invalid facility condition.');
     if (!['sofa', 'vending', 'arcade'].includes(facility.itemId) || !whole(facility.level ?? 1, 1, 4)) throw new Error('Invalid saved facility.');
   }
   for (const desk of state.receptions ?? []) { placement(desk); if (!whole(desk.level, 1, 4)) throw new Error('Invalid saved reception tier.'); }
   for (const object of state.objects ?? []) { placement(object); if (!identifier(object.itemId)) throw new Error('Invalid saved object.'); }
   const roleIds = new Set<string>();
   for (const role of state.staff) {
-    if (!role || roleIds.has(role.id) || !['receptionist', 'technician', 'janitor'].includes(role.id) ||
+    if (!role || roleIds.has(role.id) || !STAFF_ROLES.some(id => id === role.id) ||
       !whole(role.hiredCount, role.id === 'receptionist' ? 1 : 0, role.id === 'receptionist' ? 3 : 2)) throw new Error('Invalid saved staff.');
     roleIds.add(role.id);
   }
+  if (state.workforce !== undefined) validateWorkforce(state.workforce, state.staff);
   WorkshopSystem.validate(state.workshop);
   if (state.neighborhood !== undefined) NeighborhoodSystem.validate(state.neighborhood);
   const stationIds = new Set(state.stations.map((station) => station.id));

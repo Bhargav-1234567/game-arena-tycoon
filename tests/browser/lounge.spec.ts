@@ -1,3 +1,4 @@
+import { checkInFirstGuest } from './reception-controls.ts';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -15,10 +16,7 @@ async function ready(page: Page) {
   await expect(page.locator('body')).toHaveAttribute('data-game-ready', 'true', { timeout: 60000 });
   await page.locator('[data-view="lounge"]').click();
   await page.waitForFunction(() => !(window as any).__loungeGame.cameraController.isTransitioning);
-  if (page.viewportSize()!.width < 750) {
-    for (let i = 0; i < 6; i++) await page.locator('[data-zoom="1.25"]').click();
-    await page.waitForFunction(() => !(window as any).__loungeGame.cameraController.isTransitioning);
-  }
+
 }
 
 async function point(page: Page, x: number, z: number, y = 0) {
@@ -116,6 +114,7 @@ test('UI moves and cancels an idle PC while preserving ownership and valid acces
 test('real customers walk, sit, pay once, leave and release PCs; occupied move is blocked', async ({ page }, info) => {
   test.setTimeout(150000);
   await ready(page);
+  await checkInFirstGuest(page);
   await page.waitForFunction(() => [...(window as any).__loungeGame.customerSystem.customers.values()].some((customer: any) => customer.state === 'GAMING'), undefined, { timeout: 60000 });
   const seated = await page.evaluate(() => {
     const game = (window as any).__loungeGame;
@@ -132,7 +131,12 @@ test('real customers walk, sit, pay once, leave and release PCs; occupied move i
   expect(await page.evaluate(() => (window as any).__loungeGame.placementSystem.isMovingItem)).toBe(false);
   await page.screenshot({ path: info.outputPath('seated-and-protected.png') });
   await page.locator('#close-inspector-btn').click();
-  await page.waitForFunction((id) => !(window as any).__loungeGame.customerSystem.customers.has(id), seated.customer, { timeout: 75000 });
+  const left = await page.evaluate(id => {
+    const system = (window as any).__loungeGame.customerSystem;
+    for (let tick=0; tick<1400 && system.customers.has(id); tick++) system.update(.05);
+    return !system.customers.has(id);
+  }, seated.customer);
+  expect(left).toBe(true);
   expect(await page.evaluate(() => (window as any).__sessionPayments)).toEqual([Math.round(seated.rate * seated.duration / 15)]);
   expect(await page.evaluate(({ pc, customer }) => (window as any).__loungeGame.placementSystem.stations.get(pc).currentGamerId === customer, seated)).toBe(false);
   await page.screenshot({ path: info.outputPath('session-finished.png') });
@@ -201,10 +205,7 @@ test('legacy blocked chair save is preserved, skipped by assignment and repairab
   }, { key: KEY, raw: JSON.stringify(fixture) });
   await page.reload(); await expect(page.locator('body')).toHaveAttribute('data-game-ready', 'true', { timeout: 60000 });
   await page.waitForFunction(() => !(window as any).__loungeGame.cameraController.isTransitioning);
-  if (info.project.name === 'mobile') {
-    for (let i = 0; i < 6; i++) await page.locator('[data-zoom="1.25"]').click();
-    await page.waitForFunction(() => !(window as any).__loungeGame.cameraController.isTransitioning);
-  }
+
   expect((await saved(page)).stations.map((station: any) => station.id)).toEqual(originalIds);
   await expect(page.locator('#placement-status')).toContainText('blocked chair access');
   expect(await page.evaluate(() => [...(window as any).__loungeGame.placementSystem.stations.values()][0].accessIssue)).toBeTruthy();
@@ -256,20 +257,25 @@ test('all six expansions support edge building, reception relocation retargets q
   await page.waitForFunction(() => [...(window as any).__loungeGame.customerSystem.deskQueues.values()].some((queue: any) => queue.length), undefined, { timeout: 30000 });
   const desk = await point(page, 0, 3.5, .9); await page.mouse.click(desk.x, desk.y);
   await expect(page.locator('#upgrade-reception-btn')).toBeVisible();
-  const staffBefore = await page.evaluate(() => [...(window as any).__loungeGame.customerSystem.receptionists.values()][0].group.uuid);
+  const staffBefore = await page.evaluate(() => (window as any).__loungeGame.customerSystem.player.group.uuid);
   await page.locator('#move-item-btn').click(); const moved = await hover(page, -2, -5);
   await expect(page.locator('#placement-status')).toBeHidden(); await page.mouse.click(moved.x, moved.y);
   await expect.poll(() => page.evaluate(() => {
     const game = (window as any).__loungeGame, desk = [...game.placementSystem.receptionDesks.values()][0] as any;
     return (game.customerSystem.deskQueues.get(desk.id) ?? []).every((customer: any, index: number) => customer.targetPosition.distanceTo(desk.getCustomerQueuePosition(index)) < .001);
   })).toBe(true);
-  expect(await page.evaluate(() => [...(window as any).__loungeGame.customerSystem.receptionists.values()][0].group.uuid)).toBe(staffBefore);
+  expect(await page.evaluate(() => (window as any).__loungeGame.customerSystem.player.group.uuid)).toBe(staffBefore);
   await page.getByRole('button', { name: /Management/ }).click();
   const base = await page.evaluate(() => [...(window as any).__loungeGame.placementSystem.stations.values()][0].getSatisfactionScore());
   await page.locator('.hire-btn[data-role="technician"]').click();
   expect(await page.evaluate(() => [...(window as any).__loungeGame.placementSystem.stations.values()][0].getSatisfactionScore())).toBe(Math.round(base * 1.25));
   await page.locator('.hire-btn[data-role="receptionist"]').click();
-  expect(await page.evaluate(() => { const game = (window as any).__loungeGame; return game.customerSystem.getCheckInSeconds([...game.placementSystem.receptionDesks.values()][0]); })).toBe(2 / 1.35);
+  const checkInSeconds = () => page.evaluate(() => { const game = (window as any).__loungeGame; return game.customerSystem.getCheckInSeconds([...game.placementSystem.receptionDesks.values()][0]); });
+  expect(await checkInSeconds()).toBe(2);
+  await page.getByLabel('Assigned counter').selectOption({label:'Counter 1'});
+  await page.waitForFunction(() => [...(window as any).__loungeGame.workforce.workers.values()].every((w:any)=>w.avatar.ready));
+  await page.evaluate(() => { const g = (window as any).__loungeGame; for(let i=0;i<450;i++) g.customerSystem.update(.05); });
+  expect(await checkInSeconds()).toBe(2 / 1.35);
   await page.locator('#close-stats-btn').click();
   await page.screenshot({ path: info.outputPath('expanded-floor-and-relocated-queue.png') });
 });
@@ -319,6 +325,7 @@ test('browser component fixtures verify failed paths, recovery, rotated wall col
       station.isOccupied = false; station.currentGamerId = undefined;
       desk.currentTier = RECEPTION_TIERS[counterLevel - 1];
       const system = new CustomerSystem(scene, placement, economy); system.getCashierMultiplier = () => cashierMultiplier;
+      system.player.enabled = true; system.player.group.position.copy(desk.getStaffPosition());
       system.spawnInterval = Infinity; system.getSpawnInterval = () => Infinity; system.observedLayout = placement.layoutRevision;
       const customer = new Customer('timed'); customer.gridSystem = grid; customer.collisionSystem = collision;
       customer.group.position.copy(desk.getCustomerQueuePosition()); customer.state = 'WAITING_CHECKIN';
@@ -337,7 +344,7 @@ test('browser component fixtures verify failed paths, recovery, rotated wall col
   expect(results.rotatedShape.maxX - results.rotatedShape.minX).toBeGreaterThan(results.rotatedShape.maxZ - results.rotatedShape.minZ);
   expect(results.noRoute).toBe(0); expect(results.blockedTarget).toBe(0); expect(results.pathSegments).toBeGreaterThan(0); expect(results.unsafeSegments).toBe(0);
   expect(results.recovered).toBe(true); expect(results.deskStillSolidForOwner).toBe(true);
-  for (const measurement of [results.base, results.cashier, results.upgradedCounter]) expect(measurement.state).toBe('WALKING_TO_STATION');
+  for (const measurement of [results.base, results.cashier, results.upgradedCounter]) expect(measurement.state).toBe('WAITING_PC');
   expect(results.base.seconds).toBeCloseTo(2, 1);
   expect(results.cashier.seconds).toBeLessThan(results.base.seconds);
   expect(results.upgradedCounter.seconds).toBeLessThan(results.cashier.seconds);

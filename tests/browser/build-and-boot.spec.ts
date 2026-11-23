@@ -103,9 +103,19 @@ test('seeded fixtures: actual four and five matches create specials, then GPU tr
     expect(index).toBeGreaterThanOrEqual(0);
     await expect(page.locator(`[data-cell="${index}"] .tile-special`)).toHaveText(length === 4 ? '✛' : 'RGB');
     await page.locator('[data-booster="gpu"]').click();
-    const effect = page.locator(length === 4 ? '.power-beam' : '.rgb-burst').first();
-    const activation = effect.waitFor({ state: 'visible' });
-    await page.locator(`[data-cell="${index}"]`).click(); await activation;
+    // The effect lasts 320 ms. Observe it in the rendering page even when the test runner is busy.
+    await page.evaluate(selector => {
+      document.body.removeAttribute('data-observed-effect');
+      const observer = new MutationObserver(() => {
+        const effect = document.querySelector(selector);
+        if (!effect?.getBoundingClientRect().width || !effect.getBoundingClientRect().height) return;
+        document.body.dataset.observedEffect = selector;
+        observer.disconnect();
+      });
+      observer.observe(document.body, { subtree: true, childList: true });
+    }, length === 4 ? '.power-beam' : '.rgb-burst');
+    await page.locator(`[data-cell="${index}"]`).click();
+    await expect(page.locator('body')).toHaveAttribute('data-observed-effect', length === 4 ? '.power-beam' : '.rgb-burst');
     await page.screenshot({ path: info.outputPath(`${special}-activation.png`) }); await settled(page);
     expect((await saved(page)).workshop.session!.movesLeft).toBe(19);
   }

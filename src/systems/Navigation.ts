@@ -1,3 +1,7 @@
+import { NAVIGATION } from '../data/world-layout.ts';
+import { NAVIGATION_RADIUS } from '../data/simulation.ts';
+import type { GridSystem } from './GridSystem.ts';
+import type { CollisionSystem } from './CollisionSystem.ts';
 import { Vector3 } from 'three';
 import type { WorldBounds } from '../data/world-layout.ts';
 
@@ -66,4 +70,27 @@ export function findNavigationPath(start: Vector3, target: Vector3, bounds: Worl
     result.push(raw[next]); index = next;
   }
   return result;
+}
+
+export function loungeRoute(position: Vector3, destination: Vector3, grid?: GridSystem, collision?: CollisionSystem): Vector3[] {
+    const inside = new Vector3(NAVIGATION.doorX, 0, NAVIGATION.insideZ);
+    const query = collision?.createNavigationQuery(NAVIGATION_RADIUS);
+    const find = (start: Vector3, end: Vector3) => grid
+      ? grid.findPath(start, end, query) : query?.(start, end) ? [] : [end.clone()];
+    if (destination.z > NAVIGATION.doorZ) {
+      if (position.z > NAVIGATION.doorZ) return position.z > 12.8
+        ? [new Vector3(NAVIGATION.doorX, 0, position.z), new Vector3(NAVIGATION.doorX, 0, NAVIGATION.sidewalkZ), destination.clone()]
+        : [destination.clone()];
+      const route = find(position, inside);
+      return route.length ? [...route, new Vector3(0, 0, NAVIGATION.doorZ), new Vector3(0, 0, NAVIGATION.sidewalkZ), destination.clone()] : [];
+    }
+    if (position.z > NAVIGATION.doorZ) {
+      const route = find(inside, destination);
+      if (!route.length) return [];
+      return [
+        ...(position.z > 12.8 ? [new Vector3(0, 0, position.z)] : []),
+        new Vector3(0, 0, NAVIGATION.sidewalkZ), new Vector3(0, 0, NAVIGATION.doorZ), inside, ...route
+      ];
+    }
+    return find(position, destination);
 }

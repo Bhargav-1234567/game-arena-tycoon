@@ -105,6 +105,33 @@ export class OriginalCharacterMotion {
     hand.updateWorldMatrix(false, true);
   }
 
+  /** Reach for a keypad with one hand or play a standing cabinet with both. */
+  public useControls(vending: boolean, height: number, reach: number, time: number): void {
+    const blend = THREE.MathUtils.smoothstep(time, 0, .45);
+    const drop = Math.max(0, 1.02 - height) * .85 * blend;
+    const bend = Math.acos(1 - drop / (this.metadata.legUpper + this.metadata.legLower));
+    const tilt = (name: string, angle: number) => {
+      const bone = this.bone(name);
+      this.authoredPose.set(bone, bone.quaternion.clone());
+      bone.rotateX(angle);
+    };
+    this.model.position.y -= drop;
+    for (const side of ['L', 'R']) {
+      tilt(`Thigh.${side}`, -bend);
+      tilt(`Shin.${side}`, 2 * bend);
+      tilt(`Foot.${side}`, -bend);
+    }
+    tilt('Spine', (.13 + drop) * blend);
+    for (const side of vending ? ['L'] : ['R', 'L']) {
+      for (const joint of ['UpperArm', 'Forearm', 'Hand']) {
+        const bone = this.bone(`${joint}.${side}`);
+        this.authoredPose.set(bone, bone.quaternion.clone());
+      }
+      const tap = .02 * Math.sin(time * (vending ? 4 : 8) + (side === 'L' ? 0 : Math.PI));
+      this.fitArm(side, new THREE.Vector3(side === 'L' ? -.14 : .13, height + tap, reach + tap), blend);
+    }
+  }
+
   private orient(bone: THREE.Bone, rest: THREE.Vector3, worldDirection: THREE.Vector3, blend: number): void {
     const inverse = bone.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     const direction = worldDirection.normalize().applyQuaternion(inverse);

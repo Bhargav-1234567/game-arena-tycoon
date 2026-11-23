@@ -1,5 +1,7 @@
+import { Workforce } from '../systems/Workforce.ts';
+import { ReceptionUI } from '../ui/ReceptionUI.ts';
+import { newShift } from '../systems/LoungeOperations.ts';
 import { ORIGINAL_CHARACTERS } from '../data/characters.ts';
-import { SECONDS_PER_GAME_HOUR } from '../data/simulation.ts';
 import * as THREE from 'three';
 import { SceneManager } from './SceneManager.ts';
 import { CameraController } from './CameraController.ts';
@@ -45,8 +47,10 @@ export class Game {
   public exteriorEnvironmentSystem: ExteriorEnvironmentSystem;
   public economySystem: EconomySystem;
   public staffSystem: StaffSystem;
+  public workforce: Workforce;
   public particleSystem: ParticleSystem;
 
+  public receptionUI: ReceptionUI;
   public topBar: TopBar;
   public buildMenu: BuildMenu;
   public stationInspector: StationInspector;
@@ -57,7 +61,6 @@ export class Game {
   private mousePos: THREE.Vector2 = new THREE.Vector2();
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private clock: THREE.Clock = new THREE.Clock();
-  private facilityRevenueTimer: number = 0;
 
   constructor(canvas: HTMLCanvasElement, uiContainer: HTMLElement) {
     this.sceneManager = new SceneManager(canvas);
@@ -81,7 +84,13 @@ export class Game {
       this.economySystem
     );
 
-    this.customerSystem.getCashierMultiplier = () => this.staffSystem.getCashierMultiplier();
+    this.workforce = new Workforce(this.sceneManager.scene,this.placementSystem,this.staffSystem,this.customerSystem.operations);
+    this.customerSystem.workforce = this.workforce;
+    this.customerSystem.getCashierMultiplier = desk => this.workforce.cashierRate(desk);
+    this.staffSystem.onWages = amount => {
+      const shift = this.customerSystem.operations.shift; shift.wages = (shift.wages ?? 0) + amount;
+    };
+    this.staffSystem.onChange = () => { this.workforce.sync(); this.stationInspector.refreshReception(); this.save(); };
 
     this.expansionSystem = new ExpansionSystem(
       this.sceneManager.scene,
@@ -121,7 +130,7 @@ export class Game {
     this.neighborhoodUI.onModalChange = (open) => { this.cameraController.enabled = !open && !this.workshopUI.isOpen; this.statsModal.close(); };
     this.neighborhood.subscribe(() => this.updateNeighborhood());
     this.neighborhood.onBusArrival = () => this.exteriorEnvironmentSystem.arriveBus();
-    this.exteriorEnvironmentSystem.onBusStop = () => this.customerSystem.queueBusArrival();
+    this.exteriorEnvironmentSystem.onBusPassenger = (index) => this.customerSystem.spawnBusPassenger(index);
     this.exteriorEnvironmentSystem.crossingOccupied = () => this.customerSystem.getCrossingCount() > 0;
     this.customerSystem.getSpawnInterval = () => this.neighborhood.getSpawnInterval(this.economySystem.reputation);
     this.customerSystem.onCustomerServed = () => {
@@ -178,16 +187,25 @@ export class Game {
       this.statsModal.open();
     };
 
-    this.placementSystem.onReceptionPlaced = (desk) => {
-      this.customerSystem.setupReceptionistForDesk(desk);
+    this.receptionUI = new ReceptionUI(uiContainer, this.customerSystem, this.placementSystem, () => this.ready &&
+      this.cameraController.mode === 'lounge' && !this.workshopUI.isOpen && !this.neighborhoodUI.isOpen &&
+      !this.statsModal.isModalOpen() && !this.placementSystem.activeItem && !this.placementSystem.busy);
+    this.stationInspector.workforce = this.workforce;
+    this.statsModal.workforce = this.workforce;
+    this.statsModal.onLocate = id => {
+      const actor = this.workforce.workers.get(id);
+      if (actor) { this.switchView('lounge'); this.cameraController.setCenter(actor.avatar.group.position); }
     };
+    this.customerSystem.hasPerformancePart = id => this.workshop.hasPerformancePart(id);
+    this.statsModal.operations = this.customerSystem.operations;
 
     this.customerSystem.onFloatingText = (text, pos, color) => {
       this.floatingTextManager.spawn(text, pos, color);
     };
 
     this.placementSystem.onStationSelected = (station) => {
-      this.stationInspector.inspectStation(station);
+      if (station && this.customerSystem.pending.length && this.customerSystem.assignStation(station)) this.stationInspector.closeAll();
+      else this.stationInspector.inspectStation(station);
     };
 
     this.placementSystem.onReceptionSelected = (desk) => {
@@ -208,6 +226,7 @@ export class Game {
         this.stationInspector.inspectStation(target.entity);
         return;
       }
+      if (target.type === 'facility' && target.entity.reservedBy) return;
       if ((target.type === 'reception' || target.type === 'facility') && target.entity.isUpgrading) return;
       this.stationInspector.closeAll();
       if (target.type === 'station') {
@@ -226,10 +245,6 @@ export class Game {
       if (inMoveMode) {
         this.stationInspector.closeAll();
       }
-    };
-
-    this.placementSystem.onReceptionMoved = (desk) => {
-      this.customerSystem.setupReceptionistForDesk(desk);
     };
 
     this.setupPointerEvents(canvas);
@@ -305,14 +320,23 @@ export class Game {
       this.economySystem.reputation = economy.reputation;
       this.economySystem.day = economy.day;
       this.economySystem.timeMinutes = economy.timeMinutes;
-      for (const role of this.staffSystem.roles) {
-        role.hiredCount = this.restored.staff.find((entry) => entry.id === role.id)?.hiredCount ?? role.hiredCount;
+      this.staffSystem.restore(this.restored.staff,this.restored.workforce);
+      this.workforce.restoreCounterAssignments();
+      this.workforce.litter = this.restored.workforce?.litter ?? [];
+      this.workforce.sync();
+      for (const entry of this.restored.stations) this.placementSystem.stations.get(entry.id)!.sessionsSinceService = entry.sessionsSinceService ?? 0;
+      for (const entry of this.restored.facilities) {
+        const facility = this.placementSystem.facilities.get(entry.id)!;
+        facility.salesSinceRefill = entry.salesSinceRefill ?? 0;
+        facility.playsSinceService = entry.playsSinceService ?? 0;
       }
-      await this.customerSystem.setupReceptionist();
+      this.customerSystem.operations.shift = this.restored.shift ?? newShift(economy.day);
+      this.customerSystem.operations.previous = this.restored.previousShift;
     } else {
       await this.setupInitialGamingRoom();
     }
 
+    await this.customerSystem.setupReceptionist(this.restored?.receptionist);
     // 6. Spawn starting customer immediately
     await this.customerSystem.spawnInitialCustomer();
     this.ready = true;
@@ -336,8 +360,6 @@ export class Game {
     this.placementSystem.updateHover(new THREE.Vector3(-1.5, 0, 2.5));
     await this.placementSystem.tryPlace();
 
-    // 2. Setup Receptionist behind the reception desk facing entrance
-    await this.customerSystem.setupReceptionist();
 
     // 3. Station 1 on the left side (centered at X = -3.0, Z = 0.5)
     this.placementSystem.setBuildItem(BUILDABLE_ITEMS.find((i) => i.id === 'station_bundle'));
@@ -469,6 +491,7 @@ export class Game {
 
     const deltaTime = Math.min(this.clock.getDelta(), 0.1);
     const elapsedTime = this.clock.getElapsedTime();
+    this.receptionUI.readInput();
     this.cameraController.update(deltaTime);
     this.neighborhoodUI.update(this.cameraController.camera);
     document.body.dataset.cameraMoving = String(this.cameraController.isTransitioning);
@@ -496,9 +519,12 @@ export class Game {
     this.sceneManager.setLighting(period);
     this.exteriorEnvironmentSystem.setLighting(period);
     this.economySystem.update(deltaTime);
+    if (this.customerSystem.operations.rollover(this.economySystem.day)) this.statsModal.showShiftResult();
     this.customerSystem.update(deltaTime);
+    this.receptionUI.render(this.customerSystem, this.placementSystem, this.cameraController.camera);
     this.stationInspector.updateStatus();
     this.staffSystem.update(deltaTime);
+    this.statsModal.update(deltaTime);
     this.particleSystem.update(deltaTime);
     this.floatingTextManager.update(deltaTime);
     this.expansionSystem.update(elapsedTime);
@@ -509,24 +535,6 @@ export class Game {
       station.neighborhoodSatisfactionBonus = this.neighborhood.getSatisfactionBonus();
       station.update(elapsedTime);
     });
-
-    // Facility passive revenue tick (Every in-game hour ~ 15 real seconds)
-    this.facilityRevenueTimer += deltaTime;
-    if (this.facilityRevenueTimer >= SECONDS_PER_GAME_HOUR) {
-      this.facilityRevenueTimer -= SECONDS_PER_GAME_HOUR;
-      this.placementSystem.facilities.forEach((fac) => {
-        const rev = fac.group.visible ? fac.currentTier.hourlyRevenueBonus : 0;
-        if (rev && rev > 0) {
-          this.economySystem.earn(rev);
-          const icon = fac.type === 'arcade' ? '🕹️' : '🥤';
-          this.floatingTextManager.spawn(
-            `+$${rev} ${icon}`,
-            fac.group.position.clone().add(new THREE.Vector3(0, 1.8, 0)),
-            fac.type === 'arcade' ? '#c084fc' : '#34d399'
-          );
-        }
-      });
-    }
 
     // Update TopBar HUD
     this.topBar.updateValues(this.customerSystem.getActiveCustomerCount());
@@ -560,13 +568,16 @@ export class Game {
   private save(workshop: WorkshopState = this.workshop.state, neighborhood: NeighborhoodState = this.neighborhood.state, cashChange = 0, reputationChange = 0): boolean {
     if (!this.ready || this.placementSystem.busy || this.placementSystem.isMovingItem) return false;
     const snapshot: GameSaveState = {
+      workforce: this.workforce.snapshot(),
+      shift: this.customerSystem.operations.shift, previousShift: this.customerSystem.operations.previous,
+      receptionist: { x: this.customerSystem.player.group.position.x, z: this.customerSystem.player.group.position.z },
       version: 2, timestamp: Date.now(), workshop, neighborhood,
       economy: { cash: this.economySystem.cash + cashChange, reputation: Math.min(100, Math.max(0, this.economySystem.reputation + reputationChange)),
         day: this.economySystem.day, timeMinutes: this.economySystem.timeMinutes },
       expansionCount: this.expansionSystem.currentStage,
       stations: [...this.placementSystem.stations.values()].map((station) => ({
         id: station.id, gridX: station.gridX, gridZ: station.gridZ, rotationIndex: station.rotationIndex,
-        pcLevel: station.currentPC.level, chairLevel: station.currentChair.level, monitorLevel: station.currentMonitor.level,
+        sessionsSinceService: station.sessionsSinceService, pcLevel: station.currentPC.level, chairLevel: station.currentChair.level, monitorLevel: station.currentMonitor.level,
         deskLevel: station.currentDesk.level, keyboardLevel: station.currentKeyboard.level,
         mouseLevel: station.currentMouse.level, speakerLevel: station.currentSpeaker.level
       })),
@@ -575,7 +586,7 @@ export class Game {
       })),
       facilities: [...this.placementSystem.facilities.values()].map((facility) => ({
         id: facility.id, itemId: facility.type, gridX: facility.gridX, gridZ: facility.gridZ,
-        rotationIndex: facility.rotationIndex, level: facility.currentTier.level
+        salesSinceRefill: facility.salesSinceRefill, playsSinceService: facility.playsSinceService, rotationIndex: facility.rotationIndex, level: facility.currentTier.level
       })),
       objects: [...this.placementSystem.buildingObjects, ...this.placementSystem.decorObjects].map((object) => ({
         id: object.userData.persistentId ?? object.uuid, itemId: object.userData.item.id,

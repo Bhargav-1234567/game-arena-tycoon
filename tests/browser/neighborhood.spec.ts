@@ -1,3 +1,4 @@
+import { enterCounter } from './reception-controls.ts';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -59,8 +60,12 @@ test('bus visitors use the crossing and real paying customers complete a tournam
   await expect(page.locator('[data-event-status]')).toContainText('0/3');
   await page.getByRole('button', { name: 'Close district panel' }).click();
   await expect.poll(async () => Number(await page.locator('body').getAttribute('data-crossing-customers')), { timeout: 60000 }).toBeGreaterThan(0);
+  await page.locator('button[data-view="lounge"]').click();
+  await enterCounter(page);
+  for (let i=0; i<3; i++) await page.locator('.pc-choices button').first().click({ timeout: 60000 });
   await expect.poll(async () => (await saved(page)).neighborhood.event.status, { timeout: 150000 }).toBe('won');
   expect((await saved(page)).neighborhood.eventsWon).toBe(1);
+  await page.locator('button[data-view="neighborhood"]').click();
   await page.locator('.world-hotspot[data-place="plaza"]').click();
   await expect(page.locator('[data-event-status]')).toContainText('Champion');
 });

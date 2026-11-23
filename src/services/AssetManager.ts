@@ -1,3 +1,4 @@
+import { makeBin } from '../entities/StaffProps.ts';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -92,6 +93,7 @@ export class AssetManager {
   }
 
   public async loadModel(url: string): Promise<THREE.Group> {
+    if (url === 'builtin:lounge-bin') return makeBin();
     if (this.cache.has(url)) {
       return this.cloneModel(this.cache.get(url)!);
     }

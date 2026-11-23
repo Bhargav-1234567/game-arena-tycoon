@@ -1,3 +1,4 @@
+import { FACILITY_LAYOUTS, type FacilityType } from '../data/facility-layout.ts';
 import { CHAIR_DIMS, DESK_SURFACES } from '../entities/GamingStation.ts';
 import type { BuildableItem } from '../data/assets.ts';
 import type { WorldBounds } from '../data/world-layout.ts';
@@ -33,7 +34,7 @@ export function wallOffset(item: BuildableItem, rotation: number): LayoutPoint {
     !item.id.includes('corner') && !item.id.includes('column');
   return wall ? { x: [.4, 0, -.4, 0][rotation % 4], z: [0, .4, 0, -.4][rotation % 4] } : { x: 0, z: 0 };
 }
-export function geometryFor(item: BuildableItem, gridX: number, gridZ: number, rotation: number, id = 'candidate', chairLevel = 1, deskLevel = 1): PlacementGeometry {
+export function geometryFor(item: BuildableItem, gridX: number, gridZ: number, rotation: number, id = 'candidate', chairLevel = 1, deskLevel = 1, facilityLevel = 1): PlacementGeometry {
   const w = rotation % 2 ? item.height : item.width, h = rotation % 2 ? item.width : item.height;
   const center = { x: gridX + w / 2, z: gridZ + h / 2 };
   const result: PlacementGeometry = { id, item, center, reserved: { minX: gridX, maxX: gridX + w, minZ: gridZ, maxZ: gridZ + h }, solids: [], access: [] };
@@ -51,9 +52,16 @@ export function geometryFor(item: BuildableItem, gridX: number, gridZ: number, r
     result.reserved = rotatedBox(center, { minX: -2, maxX: 2, minZ: -2.5, maxZ: 1.5 }, rotation);
     box({ minX: -1.26, maxX: 1.26, minZ: -1.55, maxZ: .88 }, 'reception');
     result.access = [0, 1, 2].map((index) => rotatedPoint(center, 0, 1.85 + index * .85, rotation));
-  } else if (item.id.startsWith('sofa')) box({ minX: -1.05, maxX: 1.05, minZ: -.55, maxZ: .55 }, 'facility');
-  else if (item.id.startsWith('vending') || item.id.startsWith('arcade')) box({ minX: -.52, maxX: .52, minZ: -.52, maxZ: .52 }, 'facility');
-  else if (item.category === 'building') {
+    result.access.push(rotatedPoint(center, 0, -2.08, rotation));
+  } else if (item.category === 'facility') {
+    const type = item.id.split('_')[0] as FacilityType;
+    const layout = FACILITY_LAYOUTS[type][facilityLevel - 1];
+    box({ minX: -layout.halfWidth, maxX: layout.halfWidth, minZ: -layout.halfDepth, maxZ: layout.halfDepth }, 'facility');
+    result.access = [rotatedPoint(center, layout.entry[0], layout.entry[1], rotation)];
+  } else if (item.id === 'waste_bin') {
+    box({ minX: -.24, maxX: .24, minZ: -.21, maxZ: .21 }, 'decor');
+    result.access = [rotatedPoint(center,0,.94,rotation)];
+  } else if (item.category === 'building') {
     if (!item.id.startsWith('floor_') && !item.id.includes('doorway')) {
       const offset = wallOffset(item, rotation), wall = offset.x !== 0 || offset.z !== 0 || item.id.startsWith('wall_') || item.id.startsWith('door_');
       const halfW = wall ? (rotation % 2 ? w * .48 : .15) : w * .48;

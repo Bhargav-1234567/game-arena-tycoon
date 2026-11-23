@@ -5,6 +5,7 @@ import { GridSystem } from '../../src/systems/GridSystem.ts';
 import { PlacementSystem } from '../../src/systems/PlacementSystem.ts';
 import { EconomySystem } from '../../src/systems/EconomySystem.ts';
 import { StaffSystem } from '../../src/systems/StaffSystem.ts';
+import { Workforce } from '../../src/systems/Workforce.ts';
 import { CustomerSystem } from '../../src/systems/CustomerSystem.ts';
 import { GamingStation } from '../../src/entities/GamingStation.ts';
 import { Customer } from '../../src/entities/Customer.ts';
@@ -12,7 +13,8 @@ import { ReceptionDesk, RECEPTION_TIERS } from '../../src/entities/ReceptionDesk
 import { FacilityEntity, VENDING_TIERS } from '../../src/entities/FacilityEntity.ts';
 import { geometryFor } from '../../src/systems/LayoutGeometry.ts';
 import { BUILDABLE_ITEMS } from '../../src/data/assets.ts';
-import { ROOM_FOOTPRINTS } from '../../src/data/world-layout.ts';
+import { BUS_PASSENGERS, NAVIGATION, ROOM_FOOTPRINTS } from '../../src/data/world-layout.ts';
+import { NeighborhoodScene } from '../../src/systems/NeighborhoodScene.ts';
 import { pcUpgrades } from '../../src/data/pc-upgrades.ts';
 import { AssetManager } from '../../src/services/AssetManager.ts';
 import { chairUpgrades } from '../../src/data/chair-upgrades.ts';
@@ -119,17 +121,17 @@ test('L12: all reception queue points must be inside and reachable', () => {
   assert.equal(placement.validateGeometry(geometryFor(item('reception_counter'), -2, 2, 0)), '');
 });
 
-test('L13: waiting queues retarget on layout changes and the same receptionist is relocated', () => {
+test('L13: waiting queues retarget on layout changes and the playable receptionist stays in place', () => {
   const { scene, placement, economy } = setup(); const system = new CustomerSystem(scene, placement, economy);
   const desk = new ReceptionDesk('desk', -2, 2); desk.group.position.set(0, 0, 3.5); placement.receptionDesks.set(desk.id, desk);
   const customer = new Customer('queue'); customer.state = 'WAITING_CHECKIN'; customer.targetDesk = desk;
   customer.group.position.copy(desk.getCustomerQueuePosition());
   (system as any).deskQueues.set(desk.id, [customer]); (system as any).customers.set(customer.id, customer);
-  const staff = { group: new Group(), mixer: { update() {} } }; system.receptionists.set(desk.id, staff as any);
+  system.player.enabled = true; system.player.group.position.copy(desk.getStaffPosition());
   desk.gridX = 0; desk.group.position.x = 2; placement.layoutRevision++;
   system.update(.01);
   assert.equal((customer as any).targetPosition.x, 2);
-  assert.equal(system.receptionists.get(desk.id), staff); assert.equal(staff.group.position.x, 2);
+  assert.equal(system.player.group.position.x, 0); assert.equal(system.activeDesk, undefined);
 });
 
 test('L14: rotated walls use matching visual and collision orientation', () => {
@@ -210,7 +212,11 @@ test('building unrelated furniture does not restart a waiting customer\'s servic
   customer.gridSystem = grid; customer.collisionSystem = placement.collisionSystem;
   customer.state = 'WAITING_CHECKIN'; customer.group.position.copy(desk.getCustomerQueuePosition()); customer.targetDesk = desk;
   (system as any).customers.set(customer.id, customer); (system as any).deskQueues.set(desk.id, [customer]);
+  system.player.enabled = true;
+  system.player.group.position.copy(desk.getStaffPosition());
   for (let tick = 0; tick < 22; tick++) { placement.layoutRevision++; system.update(.1); }
+  assert.equal(customer.state, 'WAITING_PC');
+  assert.equal(system.assignStation(station), true);
   assert.equal(customer.assignedStation, station); assert.equal(customer.state, 'WALKING_TO_STATION');
 });
 
@@ -260,4 +266,318 @@ test('chair entry and exit choose a clear side and keep the customer inside peri
     }
     assert.equal(customer.state, 'LEAVING'); assert.equal(station.isOccupied, false);
   }
+});
+
+test('all 12 facility designs have reachable rotated anchors and pay once after completed use', () => {
+  for (const type of ['sofa', 'vending', 'arcade'] as const) for (let level = 1; level <= 4; level++) {
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const { placement, grid, collision } = setup();
+      const facility = new FacilityEntity('fixture', type, 0, 2, rotation, level);
+      const geometry = geometryFor(item(type + '_lvl1'), 0, 2, rotation, facility.id, undefined, undefined, level);
+      facility.group.position.set(geometry.center.x, 0, geometry.center.z);
+      placement.facilities.set(facility.id, facility);
+      const approach = facility.getApproachPosition();
+      assert.ok(Math.hypot(approach.x - geometry.access[0].x, approach.z - geometry.access[0].z) < 1e-8);
+      assert.ok(placement.routeTo(approach).length, `${type} level ${level}, rotation ${rotation}`);
+      const customer = new Customer('visitor');
+      customer.gridSystem = grid; customer.collisionSystem = collision;
+      customer.group.position.set(-2, 0, 5);
+      const payments: number[] = [];
+      customer.onFacilityPayment = (amount) => payments.push(amount);
+      assert.ok(customer.visitFacility(facility));
+      assert.equal(new Customer('other').visitFacility(facility), false);
+      assert.equal(facility.completeUse(customer.id), 0);
+      let interacted = false;
+      for (let tick = 0; tick < 650 && customer.facility; tick++) {
+        customer.update(.05);
+        if (facility.inUse) {
+          interacted = true;
+          assert.ok(customer.group.position.distanceTo(facility.getUsePosition()) < .002);
+          assert.deepEqual(payments, []);
+        }
+      }
+      assert.ok(interacted);
+      assert.equal(customer.state, 'LEAVING');
+      assert.equal(facility.reservedBy, undefined);
+      assert.equal(facility.completeUse(customer.id), 0);
+      assert.deepEqual(payments, type === 'sofa' ? [] : [facility.currentTier.pricePerUse]);
+      assert.ok(customer.group.position.distanceTo(approach) < .002);
+    }
+  }
+});
+
+test('unreachable, interrupted and reserved facilities cannot charge or move under a visitor', async () => {
+  const { placement, collision, grid } = setup();
+  const machine = new FacilityEntity('vendor', 'vending', 0, 2);
+  machine.group.position.set(.5, 0, 2.5);
+  placement.facilities.set(machine.id, machine);
+  const visitor = new Customer('visitor');
+  visitor.onFacilityPayment = () => assert.fail('Unexpected charge');
+  visitor.gridSystem = grid; visitor.collisionSystem = collision;
+  visitor.group.position.set(-20, 0, 2);
+  assert.equal(visitor.visitFacility(machine), false);
+  assert.equal(machine.reservedBy, undefined);
+  visitor.group.position.copy(machine.getApproachPosition());
+  assert.ok(visitor.visitFacility(machine));
+  visitor.update(.1);
+  assert.ok(machine.inUse);
+  await placement.startMoveFacility(machine);
+  assert.equal(placement.isMovingItem, false);
+  await assert.rejects(machine.upgrade(VENDING_TIERS[1]), /visitor/);
+  visitor.update(1);
+  visitor.leave();
+  visitor.update(5);
+  assert.equal(machine.reservedBy, undefined);
+  assert.equal(machine.completeUse(visitor.id), 0);
+});
+
+test('each bus unloads a full crowd even when the lounge is full; waiting passengers leave if no space opens', async (t) => {
+  const { scene, placement, economy } = setup();
+  const district = new NeighborhoodScene(scene), bus = new Group();
+  (district as any).bus = bus;
+  const system = new CustomerSystem(scene, placement, economy);
+  const customers: Map<string, Customer> = (system as any).customers;
+  const places = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const existing = new Customer('existing-' + i);
+    customers.set(existing.id, existing);
+  }
+  t.mock.method(Customer.prototype, 'build', async function (this: Customer, point: Vector3) {
+    this.group.position.copy(point);
+  });
+  let unloaded = 0;
+  district.onBusPassenger = async (index) => {
+    assert.equal((district as any).busPhase, 'stopped');
+    assert.equal(index, unloaded % BUS_PASSENGERS);
+    await system.spawnBusPassenger(index);
+    unloaded++;
+  };
+  for (let run = 1; run <= 2; run++) {
+    district.arriveBus();
+    let peakCrossing = 0, peakWaiting = 0;
+    // Include the farthest waiting spot and the longer of the two sidewalk exits.
+    for (let frame = 0; frame < 900; frame++) {
+      district.update(.1); system.update(.1);
+      await Promise.resolve();
+      peakCrossing = Math.max(peakCrossing, system.getCrossingCount());
+      const outside = [...customers.values()].filter((c) => c.state === 'WAITING_OUTSIDE');
+      peakWaiting = Math.max(peakWaiting, outside.length);
+      for (const visitor of outside) places.add(visitor.group.position.x.toFixed(1));
+      for (const c of customers.values()) {
+        const { x, z } = c.group.position;
+        if (z > 12.8 && z < 18.8) assert.ok(Math.abs(x - NAVIGATION.doorX) < .5);
+      }
+    }
+    assert.equal(unloaded, BUS_PASSENGERS * run);
+    assert.equal((district as any).busPhase, 'away');
+    assert.ok(peakCrossing >= 5);
+    assert.equal(peakWaiting, BUS_PASSENGERS);
+    assert.equal(places.size, BUS_PASSENGERS);
+    assert.equal(customers.size, 6);
+  }
+});
+
+test('two counters retain independent FIFO heads and paused timers with one player', () => {
+  const {scene,placement,economy} = setup();
+  const system = new CustomerSystem(scene,placement,economy);
+  system.player.enabled = true;
+  const desks = [new ReceptionDesk('north',0,0),new ReceptionDesk('east',0,0)];
+  desks[1].group.position.x = 4;
+  for (const desk of desks) {
+    placement.receptionDesks.set(desk.id,desk);
+    const customer = new Customer(desk.id);
+    customer.targetDesk = desk; customer.state = 'WAITING_CHECKIN';
+    customer.group.position.copy(desk.getCustomerQueuePosition());
+    (system as any).customers.set(customer.id, customer);
+    (system as any).deskQueues.set(desk.id, [customer]);
+  }
+  const stand = (i: number) => system.player.group.position.copy(desks[i].getStaffPosition());
+  stand(0); for (let i=0;i<10;i++) system.update(.1);
+  const first = (system as any).serviceTimers.get('north').elapsed;
+  stand(1); for (let i=0;i<24;i++) system.update(.1);
+  assert.deepEqual(system.pending.map(c => c.id),['east']);
+  assert.equal((system as any).serviceTimers.get('north').elapsed,first);
+  stand(0); for (let i=0;i<14;i++) system.update(.1);
+  assert.deepEqual(system.pending.map(c => c.id),['east','north']);
+});
+
+test('stock and wear require completed visits and manual service requires an operator at the machine', () => {
+  const {scene,placement,economy} = setup();
+  const system = new CustomerSystem(scene,placement,economy), ops = system.operations;
+  const pc = stationAt(placement);
+  const vendor = new FacilityEntity('v','vending',0,3), arcade = new FacilityEntity('a','arcade',3,2);
+  placement.facilities.set(vendor.id,vendor); placement.facilities.set(arcade.id,arcade);
+  for (const [machine,uses] of [[vendor,4],[arcade,3]] as const) {
+    for (let i=0;i<uses;i++) {
+      assert.ok(machine.reserve('guest'));
+      assert.equal(machine.completeUse('guest'),0);
+      machine.inUse=true;
+      assert.ok(machine.completeUse('guest')>0);
+      assert.equal(machine.completeUse('guest'),0);
+      machine.release('guest');
+    }
+    assert.equal(machine.reserve('extra'),false);
+  }
+  pc.sessionsSinceService=4;
+  ops.update(2,placement,vendor.getApproachPosition());
+  ops.update(2,placement);
+  assert.equal(vendor.stock,0); assert.equal(pc.needsService,true);
+  ops.update(1,placement,vendor.getApproachPosition());
+  assert.equal(vendor.stock,4); assert.equal(pc.needsService,true); assert.equal(arcade.needsService,true);
+  ops.update(5,placement,pc.getApproachWorldPosition()); assert.equal(pc.needsService,false);
+  ops.update(5,placement,arcade.getApproachPosition()); assert.equal(arcade.needsService,false);
+});
+
+test('waiting on a sofa keeps the PC reservation through standing and pays one matched performance bonus', () => {
+  const {scene,placement,economy,grid,collision} = setup();
+  const system = new CustomerSystem(scene,placement,economy), pc=stationAt(placement);
+  system.hasPerformancePart=()=>true;
+  const sofa = new FacilityEntity('couch','sofa',2,4); sofa.group.position.set(3,0,4.5);
+  placement.facilities.set(sofa.id,sofa);
+  const guest = new Customer('first');
+  guest.gridSystem=grid; guest.collisionSystem=collision;
+  guest.group.position.copy(sofa.getApproachPosition());
+  guest.waitingForPc=guest.wantsPerformance=true;
+  assert.ok(guest.visitFacility(sofa));
+  for(let i=0;i<170;i++) guest.update(.1);
+  assert.equal(sofa.inUse,true); assert.equal(guest.state,'USING_FACILITY');
+  system.pending.push(guest); assert.ok(system.assignStation(pc));
+  assert.equal(sofa.reservedBy,guest.id); assert.equal(pc.currentGamerId,guest.id);
+  const payments: number[]=[]; guest.onPayment=amount=>payments.push(amount);
+  for(let i=0;i<550;i++) guest.update(.1);
+  assert.equal(sofa.reservedBy,undefined); assert.equal(pc.isOccupied,false);
+  assert.deepEqual(payments,[Math.round(pc.getHourlyRevenue()*20/15*1.25)]);
+});
+
+test('player movement stops at the counter, the entrance boundary, and while controls are suspended', () => {
+  const {scene,placement,economy,collision} = setup();
+  const system = new CustomerSystem(scene,placement,economy);
+  const desk = new ReceptionDesk('test_counter',-2,2);
+  desk.group.position.set(0,0,3.5); placement.receptionDesks.set(desk.id,desk);
+  const player = system.player; player.enabled = true;
+  player.group.position.copy(desk.getStaffPosition());
+  player.input.set(-1,1);
+  for(let i=0;i<40;i++) {
+    player.update(.05,collision,false);
+    const {x,z} = player.group.position;
+    assert.equal(collision.isPointBlocked(x,z,.23),false);
+  }
+  assert.ok(player.group.position.z > desk.getStaffPosition().z);
+  assert.ok(player.group.position.z < desk.group.position.z);
+  player.group.position.set(0,0,7);
+  for(let i=0;i<30;i++) player.update(.05,collision,false);
+  assert.ok(player.group.position.z <= collision.roomBounds.maxZ-.23);
+  const before=player.group.position.clone(); player.onDuty=false; player.input.set(1,0);
+  player.update(.1,collision,false); assert.ok(player.group.position.equals(before));
+});
+
+
+test('cleaners reserve separate reachable jobs and retry blocked litter when a route opens', () => {
+  const {scene,placement,economy}=setup(), staff=new StaffSystem(economy);
+  const system=new CustomerSystem(scene,placement,economy);
+  const workforce=new Workforce(scene,placement,staff,system.operations);
+  staff.hire('janitor'); staff.hire('janitor');
+  for (const e of staff.employees) {
+    const group=new Group(); group.position.set(0,0,6);
+    const avatar={ready:true,group,animate() {},dispose() {}};
+    e.x=0; e.z=6;
+    workforce.workers.set(e.id,{avatar,status:'On call',arrived:false,duty:false,path:[],revision:-1,retry:0,entering:false} as any);
+  }
+  const blocked={id:'spill_under_desk',kind:'spill' as const,x:-3,z:.5,delay:0};
+  const pc=stationAt(placement);
+  workforce.litter=[blocked,{id:'spill_at_door',kind:'spill',x:0,z:6,delay:0}];
+  workforce.update(.1);
+  assert.equal(staff.employees.filter(e=>e.job?.target==='spill_at_door').length,1);
+  assert.equal(staff.employees.filter(e=>e.job?.target===blocked.id).length,0);
+  assert.ok([...workforce.workers.values()].some(w=>w.status.startsWith('Blocked')));
+  pc.group.visible=false;
+  placement.refreshLayout();
+  for(let i=0;i<400 && workforce.litter.length;i++) workforce.update(.05);
+  assert.equal(workforce.litter.length,0);
+  assert.equal(system.operations.shift.jobs,2);
+  assert.deepEqual(staff.employees.map(e=>e.jobs).sort(),[1,1]);
+});
+
+test('uncollected litter is capped both locally and across the lounge', () => {
+  const {scene,placement,economy}=setup(),staff=new StaffSystem(economy);
+  const workforce=new Workforce(scene,placement,staff,new CustomerSystem(scene,placement,economy).operations);
+  const origin=new Vector3(0,0,6);
+  for(let i=0;i<8;i++) workforce.drop('cup',origin);
+  assert.equal(workforce.litter.length,2);
+  for(let x=-5;x<=5;x+=2.5) for(let z=-1;z<=7;z+=2.5) {
+    for(let i=0;i<3;i++) workforce.drop('wrapper',new Vector3(x,0,z));
+  }
+  assert.equal(workforce.litter.length,24);
+});
+
+
+test('a receptionist can move between counters without finishing a guest remotely or duplicating progress', () => {
+  const {scene,placement,economy} = setup();
+  const system = new CustomerSystem(scene,placement,economy);
+  const staff = new StaffSystem(economy);
+  const workforce = new Workforce(scene,placement,staff,system.operations);
+  system.workforce = workforce;
+  system.getCashierMultiplier = desk => workforce.cashierRate(desk);
+  const internals = system as any;
+  internals.spawnInterval = Infinity;
+  system.getSpawnInterval = () => Infinity;
+  const first = new ReceptionDesk('north',-5,2), second = new ReceptionDesk('east',1,2);
+  for (const desk of [first,second]) desk.group.position.set(desk.gridX+2,0,desk.gridZ+1.5);
+  for (const desk of [first,second]) placement.receptionDesks.set(desk.id,desk);
+  staff.hire('receptionist');
+  const employee = staff.employees[0], group = new Group();
+  group.position.set(0,0,6);
+  workforce.workers.set(employee.id,{avatar:{group,ready:true,animate() {},dispose() {}},status:'',path:[],
+    retry:0,revision:-1,arrived:false,duty:false,entering:false} as any);
+  const guest = new Customer('waiting');
+  guest.group.position.copy(first.getCustomerQueuePosition());
+  guest.targetDesk = first;
+  guest.state = 'WAITING_CHECKIN';
+  internals.customers.set(guest.id,guest);
+  internals.deskQueues.set(first.id,[guest]);
+  internals.observedLayout=placement.layoutRevision;
+  const tick = () => system.update(.05);
+  assert.equal(workforce.assignReceptionist('missing-counter',employee.id),false);
+  assert.equal(workforce.assignReceptionist(first.id,employee.id),true);
+  tick();
+  assert.equal(internals.serviceTimers.get(first.id).elapsed,0);
+  for(let i=0;i<200 && !internals.serviceTimers.get(first.id).elapsed;i++) tick();
+  const progress=internals.serviceTimers.get(first.id).elapsed;
+  assert.ok(progress>0);
+  workforce.assignReceptionist(second.id,employee.id);
+  assert.equal(workforce.receptionistAt(first),undefined);
+  for(let i=0;i<120;i++) tick();
+  assert.equal(internals.serviceTimers.get(first.id).elapsed,progress);
+  assert.equal(employee.jobs,0);
+  assert.equal(workforce.receptionistAt(second)?.id,employee.id,workforce.workers.get(employee.id)?.status);
+  workforce.assignReceptionist(first.id,employee.id);
+  for(let i=0;i<200 && !system.pending.length;i++) tick();
+  assert.equal(employee.jobs,1);
+  assert.deepEqual(system.pending.map(c=>c.id),['waiting']);
+  for(let i=0;i<50;i++) tick();
+  assert.equal(employee.jobs,1);
+});
+
+test('legacy cashier preferences migrate to exclusive, existing counters without charging for hires', () => {
+  const {scene,placement,economy}=setup(),staff=new StaffSystem(economy);
+  const workforce=new Workforce(scene,placement,staff,new CustomerSystem(scene,placement,economy).operations);
+  const desk=new ReceptionDesk('front',0,2);
+  placement.receptionDesks.set(desk.id,desk);
+  staff.hire('receptionist'); staff.hire('receptionist');
+  const [implicit,explicit]=staff.employees;
+  implicit.priority='auto';
+  implicit.job={kind:'assist',stage:'work',target:desk.id,elapsed:0};
+  explicit.priority=desk.id;
+  const cash=economy.cash;
+  workforce.restoreCounterAssignments();
+  assert.equal(explicit.priority,desk.id);
+  assert.equal(implicit.priority,'unassigned');
+  assert.equal(implicit.job,undefined);
+  explicit.priority='missing-desk';
+  implicit.priority='auto';
+  implicit.job={kind:'assist',stage:'work',target:desk.id,elapsed:0};
+  workforce.restoreCounterAssignments();
+  assert.equal(implicit.priority,desk.id);
+  assert.equal(explicit.priority,'unassigned');
+  assert.equal(economy.cash,cash);
 });

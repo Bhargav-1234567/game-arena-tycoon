@@ -1,3 +1,4 @@
+import { loungeRoute } from '../systems/Navigation.ts';
 import * as THREE from 'three';
 import { applyCharacterAppearance, randomCharacterAppearance } from '../characters/CharacterAppearance.ts';
 import { NAVIGATION } from '../data/world-layout.ts';
@@ -8,13 +9,21 @@ import { OriginalCharacterMotion, CHAIR_CUSHION_HEIGHTS, SEAT_APPROACH_SECONDS, 
 import { CollisionSystem } from '../systems/CollisionSystem.ts';
 import { CUSTOMER_RADIUS, NAVIGATION_RADIUS, SECONDS_PER_GAME_HOUR, CHAIR_ENTRY_SIDE } from '../data/simulation.ts';
 import type { ReceptionDesk } from './ReceptionDesk.ts';
+import type { FacilityEntity } from './FacilityEntity.ts';
 import { GridSystem } from '../systems/GridSystem.ts';
 
 export type CustomerState =
   | 'SPAWNING'
+  | 'WALKING_FROM_BUS'
+  | 'WAITING_OUTSIDE'
   | 'WALKING_TO_RECEPTION'
+  | 'WALKING_TO_BIN'
+  | 'USING_BIN'
+  | 'WAITING_PC'
   | 'WAITING_CHECKIN'
   | 'WALKING_TO_STATION'
+  | 'WALKING_TO_FACILITY'
+  | 'USING_FACILITY'
   | 'SEATING'
   | 'UNSEATING'
   | 'GAMING'
@@ -32,6 +41,27 @@ export class Customer {
   public isMale: boolean = true;
 
   public assignedStation?: GamingStation;
+  public facility?: FacilityEntity;
+  public binStop?: { stop: THREE.Vector3; center: THREE.Vector3 };
+  private binFacing?: THREE.Vector3;
+  private binTime = 0;
+  public waitingForPc = false;
+  public wantsPerformance = false;
+  public performanceBonus = false;
+  public onSofaFinished?: () => void;
+  private sofaDeparture?: number;
+  private facilityProgress = 0;
+  private facilityTime = 0;
+
+  public get operationProgress(): number | undefined {
+    if (this.state === 'USING_BIN') return Math.min(1,this.binTime);
+    if (this.state === 'GAMING') return Math.min(1, this.gamingTimer / this.gamingDuration);
+    if (this.state === 'USING_FACILITY' && !this.waitingForPc) return this.facilityProgress;
+    return undefined;
+  }
+
+  private facilitySeatBlend = 0;
+  public onFacilityPayment?: (amount: number, facility: FacilityEntity) => void;
   public targetDeskId?: string;
   public targetDesk?: ReceptionDesk;
   public gamingDuration: number = 20; // seconds
@@ -127,25 +157,7 @@ export class Customer {
   }
 
   public pathTo(destination: THREE.Vector3): THREE.Vector3[] {
-    const position = this.group.position;
-    const inside = new THREE.Vector3(NAVIGATION.doorX, 0, NAVIGATION.insideZ);
-    const query = this.collisionSystem?.createNavigationQuery(NAVIGATION_RADIUS);
-    const find = (start: THREE.Vector3, end: THREE.Vector3) => this.gridSystem
-      ? this.gridSystem.findPath(start, end, query) : query?.(start, end) ? [] : [end.clone()];
-    if (destination.z > NAVIGATION.doorZ) {
-      if (position.z > NAVIGATION.doorZ) return [new THREE.Vector3(0, 0, NAVIGATION.sidewalkZ), destination.clone()];
-      const route = find(position, inside);
-      return route.length ? [...route, new THREE.Vector3(0, 0, NAVIGATION.doorZ), new THREE.Vector3(0, 0, NAVIGATION.sidewalkZ), destination.clone()] : [];
-    }
-    if (position.z > NAVIGATION.doorZ) {
-      const route = find(inside, destination);
-      if (!route.length) return [];
-      return [
-        ...(position.z > 12.8 ? [new THREE.Vector3(0, 0, position.z)] : []),
-        new THREE.Vector3(0, 0, NAVIGATION.sidewalkZ), new THREE.Vector3(0, 0, NAVIGATION.doorZ), ...route
-      ];
-    }
-    return find(position, destination);
+    return loungeRoute(this.group.position, destination, this.gridSystem, this.collisionSystem);
   }
 
   public moveTo(destination: THREE.Vector3, nextState?: CustomerState): boolean {
@@ -177,6 +189,13 @@ export class Customer {
     try {
       this.avatar?.restoreAnimationPose();
       this.mixer?.update(deltaTime);
+      if (this.facility && (!this.facility.group.visible || this.facility.reservedBy !== this.id)) { this.leave(); return; }
+      if (this.state === 'USING_BIN') {
+        this.binTime += deltaTime;
+        if (this.binTime >= 1) this.leave();
+        return;
+      }
+      if (this.state === 'USING_FACILITY') { this.updateFacility(deltaTime); return; }
       if (this.state === 'SEATING' || this.state === 'UNSEATING') {
         const station = this.assignedStation;
         if (!station) { this.leave(); return; }
@@ -226,7 +245,7 @@ export class Customer {
         return;
       }
       if (this.state === 'WAITING_CHECKIN') { this.greetingTimer -= deltaTime; if (this.greetingTimer <= 0) this.playAction(this.idleAction); return; }
-      if (!['WALKING_TO_RECEPTION', 'WALKING_TO_STATION', 'LEAVING'].includes(this.state)) return;
+      if (!['WALKING_FROM_BUS', 'WALKING_TO_RECEPTION', 'WALKING_TO_STATION', 'WALKING_TO_FACILITY', 'WALKING_TO_BIN', 'LEAVING'].includes(this.state)) return;
       this.journeyTime += deltaTime;
       let target = this.waypoints[this.currentWaypointIndex];
       if (target) {
@@ -277,6 +296,20 @@ export class Customer {
 
   private fitAvatar(): void {
     if (!this.avatar) return;
+    if (this.state === 'USING_BIN') {
+      this.avatar.fit(0); this.avatar.useControls(true,.66,.28,this.binTime+.2); return;
+    }
+    if (this.facility && this.state === 'USING_FACILITY') {
+      const { seat, controls } = this.facility.layout;
+      if (seat) {
+        const [height, reach] = controls ?? [seat[1] + .14, .22];
+        this.avatar.fit(this.facilitySeatBlend, seat[1], height - .027, reach, .14);
+      } else if (controls) {
+        this.avatar.fit(0);
+        this.avatar.useControls(this.facility.type === 'vending', controls[0], controls[1], this.facilityTime);
+      }
+      return;
+    }
     const station = this.assignedStation;
     const blend = this.state === 'GAMING' ? 1 : this.state === 'SEATING'
       ? THREE.MathUtils.smoothstep(this.transitionTimer - SEAT_APPROACH_SECONDS, 0, SIT_TRANSITION_SECONDS)
@@ -290,8 +323,24 @@ export class Customer {
   }
 
   private onReachedTarget(): void {
-    if (this.state === 'WALKING_TO_RECEPTION') {
-      this.state = 'WAITING_CHECKIN';
+    if (this.state === 'WALKING_TO_BIN') {
+      if (this.binFacing) this.group.rotation.y=Math.atan2(this.binFacing.x-this.group.position.x,this.binFacing.z-this.group.position.z);
+      this.state = 'USING_BIN'; this.binTime = 0; this.playAction(this.idleAction);
+    } else if (this.state === 'WALKING_FROM_BUS') {
+      this.state = 'WAITING_OUTSIDE';
+      this.group.rotation.y = Math.atan2(NAVIGATION.doorX - this.group.position.x, NAVIGATION.doorZ - this.group.position.z);
+      this.playAction(this.idleAction);
+    } else if (this.state === 'WALKING_TO_FACILITY' && this.facility) {
+      this.state = 'USING_FACILITY';
+      this.facilityTime = this.facilityProgress = this.facilitySeatBlend = 0;
+      this.group.position.copy(this.facility.getApproachPosition());
+      this.group.rotation.y = this.facility.group.rotation.y + (this.facility.type === 'sofa' ? 0 : Math.PI);
+      if (!this.facility.layout.seat) {
+        this.facility.inUse = true;
+        this.playAction(this.idleAction);
+      }
+    } else if (this.state === 'WALKING_TO_RECEPTION') {
+      this.state = this.waitingForPc ? 'WAITING_PC' : 'WAITING_CHECKIN';
       if (this.targetDesk) {
         const direction = this.targetDesk.group.position.clone().sub(this.group.position);
         this.group.rotation.y = Math.atan2(direction.x, direction.z);
@@ -319,7 +368,8 @@ export class Customer {
 
   public finishSession(): void {
     if (this.state !== 'GAMING' || !this.assignedStation) return;
-    const revenue = Math.round(this.assignedStation.getHourlyRevenue() * this.gamingDuration / SECONDS_PER_GAME_HOUR);
+    this.assignedStation.sessionsSinceService++;
+    const revenue = Math.round(this.assignedStation.getHourlyRevenue() * this.gamingDuration / SECONDS_PER_GAME_HOUR * (this.performanceBonus ? 1.25 : 1));
     this.onPayment?.(revenue, this.group.position.clone().add(new THREE.Vector3(0, 1.8, 0)));
     this.chairSide = this.availableChairSide() ?? this.chairSide;
     this.state = 'UNSEATING';
@@ -327,13 +377,98 @@ export class Customer {
     this.playAction(this.standUpAction);
   }
 
+  public visitFacility(facility: FacilityEntity): boolean {
+    if (this.facility || this.assignedStation || !facility.reserve(this.id)) return false;
+    const route = this.pathTo(facility.getApproachPosition());
+    if (!route.length) { facility.release(this.id); return false; }
+    this.facility = facility;
+    this.setWaypoints(route, 'WALKING_TO_FACILITY');
+    return true;
+  }
+
+  public dispatch(station: GamingStation, bonus: boolean) {
+    station.currentGamerId = this.id;
+    station.isOccupied = true;
+    this.assignedStation = station;
+    this.performanceBonus = bonus;
+    this.waitingForPc = false;
+    if (this.facility && this.state === 'USING_FACILITY') {
+      this.sofaDeparture = this.facilityTime;
+      return;
+    }
+    this.walkToAssignedStation();
+  }
+
+  private walkToAssignedStation() {
+    this.facility?.release(this.id);
+    this.facility = undefined;
+    this.sofaDeparture = undefined;
+    if (this.assignedStation) this.moveTo(this.assignedStation.getApproachWorldPosition(), 'WALKING_TO_STATION');
+  }
+
+  private updateFacility(delta: number): void {
+    const facility = this.facility!;
+    const previous = this.facilityTime;
+    this.facilityTime += delta;
+    const time = this.facilityTime;
+    const entry = facility.getApproachPosition(), anchor = facility.getUsePosition();
+    const seated = !!facility.layout.seat;
+    const walk = seated ? Math.max(0, entry.distanceTo(anchor) - .42) / this.walkSpeed : 0;
+    const arrival = seated ? walk + SIT_TRANSITION_SECONDS : 0;
+    const duration = facility.type === 'sofa' ? 6 : facility.type === 'arcade' ? 8 : 3;
+    const finish = this.sofaDeparture !== undefined ? Math.max(arrival, this.sofaDeparture)
+      : this.waitingForPc ? Infinity : arrival + duration;
+    this.facilityProgress = THREE.MathUtils.clamp((time - arrival) / duration, 0, 1);
+    if (seated) {
+      // Reverse the same clear entry path when standing up from the cushion.
+      const elapsed = Math.max(0, Math.min(time, arrival, finish + arrival - time));
+      this.facilitySeatBlend = THREE.MathUtils.smoothstep(elapsed, walk, arrival);
+      this.group.position.lerpVectors(entry, anchor, elapsed / arrival);
+      if (time < walk || time > finish + SIT_TRANSITION_SECONDS) this.playAction(this.walkAction);
+      else if (time < arrival) this.playAction(this.sitDownAction);
+      else if (time < finish) this.playAction(this.sitAction);
+      else this.playAction(this.standUpAction);
+      if (previous < arrival && time >= arrival) facility.inUse = true;
+    }
+    if (previous < finish && time >= finish) {
+      const payment = facility.completeUse(this.id);
+      if (facility.type === 'sofa' && this.sofaDeparture === undefined) this.onSofaFinished?.();
+      if (payment > 0) this.onFacilityPayment?.(payment, facility);
+    }
+    if (time >= finish + arrival) {
+      if (this.assignedStation) this.walkToAssignedStation();
+      else this.leave();
+    }
+  }
+
   public leave(): void {
+    this.waitingForPc = false;
     this.releaseStation();
+    if (this.facility) {
+      if (this.state === 'USING_FACILITY') this.group.position.copy(this.facility.getApproachPosition());
+      this.facility.release(this.id);
+      this.facility = undefined;
+    }
+    if (this.binStop) {
+      const { stop, center } = this.binStop; this.binFacing = center; this.binStop = undefined;
+      if (this.moveTo(stop,'WALKING_TO_BIN')) return;
+    }
     this.exitX = Math.random() > .5 ? NAVIGATION.exitLeft : NAVIGATION.exitRight;
     this.moveTo(new THREE.Vector3(this.exitX, 0, NAVIGATION.sidewalkZ), 'LEAVING');
   }
 
   private despawn(): void {
     this.releaseStation(); this.state = 'DESPAWNED'; this.onFinished?.(this);
+  }
+
+  public dispose(): void {
+    this.mixer?.stopAllAction();
+    // Each visitor owns cloned materials and skeleton buffers. The GLB geometry and textures are shared.
+    this.group.traverse((node) => {
+      const mesh = node as THREE.SkinnedMesh;
+      if (!mesh.isMesh) return;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) material.dispose();
+      if (mesh.isSkinnedMesh) mesh.skeleton.dispose();
+    });
   }
 }

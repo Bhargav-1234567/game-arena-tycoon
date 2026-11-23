@@ -48,8 +48,7 @@ export const BUILDABLE_ITEMS: BuildableItem[] = [
     width: 1,
     height: 1,
     modelPath: '/assets/models/business/arcade/arcade_lvl1.glb',
-    description: '8-bit retro gaming cabinet with joystick controls.',
-    hourlyRevenueBonus: 20,
+    description: 'Visitors pay $20 per completed game.',
     reputationBonus: 12
   },
 
@@ -62,8 +61,7 @@ export const BUILDABLE_ITEMS: BuildableItem[] = [
     width: 1,
     height: 1,
     modelPath: '/assets/models/business/vending/vending_lvl1.glb',
-    description: 'Cold sodas and water bottles for thirsty players.',
-    hourlyRevenueBonus: 15,
+    description: 'Visitors pay $15 per completed purchase.',
     reputationBonus: 5
   },
 
@@ -81,6 +79,10 @@ export const BUILDABLE_ITEMS: BuildableItem[] = [
   },
 
   // Decor & Walls
+  {
+    id: 'waste_bin', name: 'Lounge Waste Bin', category: 'decor', price: 45, width: 1, height: 1,
+    modelPath: 'builtin:lounge-bin', description: 'Guests and cleaners can dispose of litter here. Leave the front clear.'
+  },
   {
     id: 'plant_indoor',
     name: 'Modern Indoor Planter',

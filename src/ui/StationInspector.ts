@@ -1,3 +1,4 @@
+import type { Workforce } from '../systems/Workforce.ts';
 import { GamingStation } from '../entities/GamingStation.ts';
 import { ReceptionDesk, RECEPTION_TIERS } from '../entities/ReceptionDesk.ts';
 import { FacilityEntity } from '../entities/FacilityEntity.ts';
@@ -142,18 +143,40 @@ export class StationInspector {
   }
 
   public updateStatus(): void {
+    const facility = this.currentFacility;
+    if (facility && !this.isUpgrading) {
+      const label = this.element.querySelector('.status-text');
+      const activity = facility.type === 'sofa' ? 'Visitor resting' : facility.type === 'arcade' ? 'Game in progress' : 'Visitor purchasing';
+      const status = facility.serviceOwner ? 'Employee assigned' : facility.needsService ? 'Repair at the machine' : facility.type === 'vending' && facility.stock === 0 ? 'Empty · refill at the machine' : facility.inUse ? activity : facility.reservedBy ? 'Reserved for a visitor' : 'Available';
+      const stock = facility.type === 'vending' ? ` · Stock ${facility.stock}/${facility.capacity}` : '';
+      const text = `${facility.currentTier.name} · ${status}${stock}`;
+      if (label && label.textContent !== text) label.textContent = text;
+      const busy = !!facility.reservedBy || !!facility.serviceOwner || facility.isUpgrading;
+      const move = this.element.querySelector<HTMLButtonElement>('#move-item-btn');
+      if (move) move.disabled = busy;
+      const upgrade = this.element.querySelector<HTMLButtonElement>('#upgrade-facility-btn');
+      const next = facility.getTiers()[facility.currentTier.level];
+      if (upgrade && next) upgrade.disabled = busy || !this.economySystem.canAfford(next.price);
+      return;
+    }
     const station = this.currentStation;
     if (!station || this.isUpgrading) return;
     const status = this.element.querySelector('.status-text');
-    if (status) status.textContent = station.accessIssue ? `Unavailable: ${station.accessIssue}` : station.isOccupied ? 'Reserved for customer 🎮' : 'Available for customers';
+    if (status) status.textContent = station.accessIssue ? `Unavailable: ${station.accessIssue}` : station.serviceOwner ? 'Technician assigned' : station.needsService ? 'Repair at the PC' : station.isOccupied ? 'Reserved for customer 🎮' : 'Available for customers';
     this.element.querySelector('.inspector-status-card')?.classList.toggle('occupied', station.isOccupied);
     const move = this.element.querySelector<HTMLButtonElement>('#move-item-btn');
-    if (move) move.disabled = station.isOccupied || !!station.currentGamerId || station.isUpgrading;
+    if (move) move.disabled = !!station.serviceOwner || station.isOccupied || !!station.currentGamerId || station.isUpgrading;
     for (const [selector, next] of [['#upgrade-chair-btn', chairUpgrades.find((tier) => tier.level === station.currentChair.level + 1)],
       ['#upgrade-desk-btn', deskUpgrades.find((tier) => tier.level === station.currentDesk.level + 1)]] as const) {
       const button = this.element.querySelector<HTMLButtonElement>(selector);
-      if (button && next) button.disabled = station.isOccupied || station.isUpgrading || !this.economySystem.canAfford(next.price);
+      if (button && next) button.disabled = !!station.serviceOwner || station.isOccupied || station.isUpgrading || !this.economySystem.canAfford(next.price);
     }
+  }
+
+  public workforce?: Workforce;
+
+  public refreshReception(): void {
+    if (this.currentReception && !this.isUpgrading) this.renderReception();
   }
 
   private renderReception() {
@@ -196,6 +219,14 @@ export class StationInspector {
         <p style="font-size: 12px; margin-top: 4px; line-height: 1.4; color: #cbd5e1;">${r.currentTier.desktopItems}</p>
       </div>
 
+      <label class="counter-assignment">Assigned receptionist
+        <select id="counter-employee">
+          <option value="">Unassigned</option>
+          ${(this.workforce?.receptionists ?? []).map(e => `<option value="${escapeHtml(e.id)}" ${e.priority===r.id ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
+        </select>
+      </label>
+      ${this.workforce?.receptionists.length ? '' : '<p class="counter-hire-hint">Hire a receptionist in Management to staff this counter.</p>'}
+
       <h4 class="section-title">Front Counter Upgrade</h4>
 
       <div class="upgrade-list">
@@ -215,6 +246,9 @@ export class StationInspector {
       </div>
     `;
 
+    const assignment = this.element.querySelector<HTMLSelectElement>('#counter-employee')!;
+    assignment.disabled = !this.workforce?.receptionists.length;
+    assignment.addEventListener('change', () => this.workforce?.assignReceptionist(r.id, assignment.value || undefined));
     this.element.querySelector('#close-inspector-btn')?.addEventListener('click', () => {
       this.inspectReception(null);
     });
@@ -247,8 +281,8 @@ export class StationInspector {
         themeHex: 0x8b5cf6,
         icon: '🕹️',
         title: 'Retro Arcade Cabinet',
-        metric2Label: 'Passive Income',
-        metric2Val: `+$${f.currentTier.hourlyRevenueBonus ?? 0}/hr 💵`
+        metric2Label: 'Completed game',
+        metric2Val: `$${f.currentTier.pricePerUse} / play`
       },
       vending: {
         badgeText: 'VENDING',
@@ -256,8 +290,8 @@ export class StationInspector {
         themeHex: 0x10b981,
         icon: '🥤',
         title: 'Vending Machine',
-        metric2Label: 'Snack Revenue',
-        metric2Val: `+$${f.currentTier.hourlyRevenueBonus ?? 0}/hr 💵`
+        metric2Label: 'Completed purchase',
+        metric2Val: `$${f.currentTier.pricePerUse} / sale`
       },
       sofa: {
         badgeText: 'LOUNGE',
@@ -265,8 +299,8 @@ export class StationInspector {
         themeHex: 0xf59e0b,
         icon: '🛋️',
         title: 'Lounge Seating',
-        metric2Label: 'Guest Comfort',
-        metric2Val: `+${f.currentTier.level * 25}% Mood 😊`
+        metric2Label: 'Visitor seating',
+        metric2Val: 'Free'
       }
     }[f.type];
 
@@ -551,7 +585,7 @@ export class StationInspector {
       this.celebrateUpgrade(s.group.position);
     });
     const move = this.element.querySelector<HTMLButtonElement>('#move-item-btn')!;
-    move.disabled = s.isOccupied || !!s.currentGamerId || s.isUpgrading;
+    move.disabled = !!s.serviceOwner || s.isOccupied || !!s.currentGamerId || s.isUpgrading;
     if (move.disabled) move.title = 'Wait for the customer or upgrade to finish before moving this PC.';
     if (s.isOccupied) this.element.querySelectorAll<HTMLButtonElement>('#upgrade-chair-btn, #upgrade-desk-btn').forEach((button) => {
       button.disabled = true; button.title = 'Wait for the customer to leave before changing chair or desk geometry.';

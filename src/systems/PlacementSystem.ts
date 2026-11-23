@@ -104,7 +104,7 @@ export class PlacementSystem {
     const result: PlacementGeometry[] = [], stationItem = BUILDABLE_ITEMS.find((item) => item.category === 'station')!;
     for (const station of this.stations.values()) if (station.group.visible) result.push(geometryFor(stationItem, station.gridX, station.gridZ, station.rotationIndex, station.id, station.currentChair.level, station.currentDesk.level));
     for (const desk of this.receptionDesks.values()) if (desk.group.visible) result.push(geometryFor(BUILDABLE_ITEMS.find((item) => item.id.startsWith('reception'))!, desk.gridX, desk.gridZ, desk.rotationIndex, desk.id));
-    for (const facility of this.facilities.values()) if (facility.group.visible) result.push(geometryFor(BUILDABLE_ITEMS.find((item) => item.id.startsWith(facility.type))!, facility.gridX, facility.gridZ, facility.rotationIndex, facility.id));
+    for (const facility of this.facilities.values()) if (facility.group.visible) result.push(geometryFor(BUILDABLE_ITEMS.find((item) => item.id.startsWith(facility.type))!, facility.gridX, facility.gridZ, facility.rotationIndex, facility.id, undefined, undefined, facility.currentTier.level));
     for (const object of [...this.decorObjects, ...this.buildingObjects]) {
       if (!object.visible) continue;
       const data = object.userData, id = data.persistentId ?? object.uuid;
@@ -128,7 +128,7 @@ export class PlacementSystem {
     if (!this.activeItem) return;
     const station = this.movingItemContext?.station;
     return geometryFor(this.activeItem, this.currentGridPos.x, this.currentGridPos.z, this.rotationIndex,
-      this.movingId() ?? 'candidate', station?.currentChair.level, station?.currentDesk.level);
+      this.movingId() ?? 'candidate', station?.currentChair.level, station?.currentDesk.level, this.movingItemContext?.facility?.currentTier.level);
   }
 
   private reserve(item: BuildableItem, x: number, z: number, rotation: number, id: string): void {
@@ -159,10 +159,10 @@ export class PlacementSystem {
         proposed.flatMap((entry) => entry.solids).filter((box) => box.id !== `${candidate.id}_chair`));
       if (!candidate.entryPoints.some((point) => !query(new THREE.Vector3(point.x, 0, point.z), new THREE.Vector3(point.x, 0, point.z)))) return 'Keep one side of the chair clear for sitting and standing.';
     }
-    if (candidate.access.some((point) => !this.routeTo(point, proposed).length)) return 'Leave a clear route from the entrance to the chair or all three queue positions.';
+    if (candidate.access.some((point) => !this.routeTo(point, proposed).length)) return 'Leave a clear route to the chair, service point or reception queue.';
     if (candidate.seat && existing.some((entry) => entry.solids.some((box) => circleOverlaps(candidate.seat!, CUSTOMER_RADIUS, box)))) return 'Another object blocks this chair.';
     for (const entry of existing) for (const point of entry.access) {
-      if (this.routeTo(point, existing).length && !this.routeTo(point, proposed).length) return 'This would block access to an existing chair or reception queue.';
+      if (this.routeTo(point, existing).length && !this.routeTo(point, proposed).length) return 'This would block access to an existing chair, service point or reception queue.';
     }
     for (const person of this.getCustomerBodies()) {
       if (this.routeTo(person, existing).length && !this.routeTo(person, proposed).length) return 'This would trap a customer. Keep a route to the exit open.';
@@ -181,6 +181,16 @@ export class PlacementSystem {
     }
     const blocked = [...this.stations.values()].filter((station) => station.group.visible && station.accessIssue).length;
     this.onValidationChanged?.(blocked ? `${blocked} PC${blocked === 1 ? ' has' : 's have'} blocked chair access. Move nearby furniture to clear a route.` : '');
+  }
+
+  private registerFacility(facility: FacilityEntity, item: BuildableItem): void {
+    facility.validateUpgrade = (tier) => {
+      const error = this.validateGeometry(geometryFor(item, facility.gridX, facility.gridZ, facility.rotationIndex,
+        facility.id, undefined, undefined, tier.level));
+      if (error) throw new Error(error);
+    };
+    facility.onLayoutChanged = () => this.refreshLayout();
+    this.facilities.set(facility.id, facility);
   }
 
   private configureStation(station: GamingStation): void {
@@ -447,7 +457,7 @@ export class PlacementSystem {
           : this.activeItem.id.startsWith('vending')
           ? 'vending'
           : 'arcade';
-        const facility = new FacilityEntity('ghost_facility', type, 0, 0, 0, 1);
+        const facility = new FacilityEntity('ghost_facility', type, 0, 0, 0, this.movingItemContext?.facility?.currentTier.level);
         await facility.build();
         model = facility.group;
       } else {
@@ -584,7 +594,7 @@ export class PlacementSystem {
       this.scene.add(group);
       if (station) { this.configureStation(station); this.stations.set(id, station); }
       else if (desk) this.receptionDesks.set(id, desk);
-      else if (facility) this.facilities.set(id, facility);
+      else if (facility) this.registerFacility(facility, item);
       else (item.category === 'building' ? this.buildingObjects : this.decorObjects).push(group);
       this.reserve(item, x, z, rotation, id);
       if (item.reputationBonus) this.economySystem.addReputation(item.reputationBonus);
@@ -709,7 +719,7 @@ export class PlacementSystem {
       await facility.build();
       const item = BUILDABLE_ITEMS.find((candidate) => candidate.id.startsWith(type))!;
       place(facility.group, entry, item);
-      this.facilities.set(entry.id, facility);
+      this.registerFacility(facility, item);
     }
     for (const entry of saved.objects ?? []) {
       const item = BUILDABLE_ITEMS.find((candidate) => candidate.id === entry.itemId);
@@ -767,7 +777,7 @@ export class PlacementSystem {
 
     if (this.selectedStation) {
       const station = this.selectedStation;
-      if (station.isOccupied || station.currentGamerId || station.isUpgrading) return false;
+      if (station.serviceOwner || station.isOccupied || station.currentGamerId || station.isUpgrading) return false;
       this.startMoveStation(station);
       return true;
     }
@@ -779,7 +789,7 @@ export class PlacementSystem {
     }
     if (this.selectedFacility) {
       const facility = this.selectedFacility;
-      if (facility.isUpgrading) return false;
+      if (facility.isUpgrading || facility.serviceOwner || facility.reservedBy) return false;
       this.startMoveFacility(facility);
       return true;
     }
@@ -792,7 +802,7 @@ export class PlacementSystem {
   }
 
   public async startMoveStation(station: GamingStation): Promise<void> {
-    if (station.isOccupied || station.currentGamerId || station.isUpgrading) return;
+    if (station.serviceOwner || station.isOccupied || station.currentGamerId || station.isUpgrading) return;
     await this.startMove({ type: 'station', station, item: BUILDABLE_ITEMS.find((item) => item.category === 'station')!,
       originalGridX: station.gridX, originalGridZ: station.gridZ, originalRotationIndex: station.rotationIndex });
   }
@@ -804,7 +814,7 @@ export class PlacementSystem {
   }
 
   public async startMoveFacility(facility: FacilityEntity): Promise<void> {
-    if (facility.isUpgrading) return;
+    if (facility.isUpgrading || facility.serviceOwner || facility.reservedBy) return;
     await this.startMove({ type: 'facility', facility, item: BUILDABLE_ITEMS.find((item) => item.id.startsWith(facility.type))!,
       originalGridX: facility.gridX, originalGridZ: facility.gridZ, originalRotationIndex: facility.rotationIndex });
   }
@@ -853,7 +863,7 @@ export class PlacementSystem {
 
   public getAvailableStation(): GamingStation | null {
     for (const station of this.stations.values()) {
-      if (station.group.visible && !station.isUpgrading && !station.accessIssue && !station.isOccupied) {
+      if (station.group.visible && !station.serviceOwner && !station.isUpgrading && !station.needsService && !station.accessIssue && !station.isOccupied) {
         return station;
       }
     }

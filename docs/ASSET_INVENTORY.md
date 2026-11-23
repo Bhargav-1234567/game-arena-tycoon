@@ -58,3 +58,7 @@ module and the maximum visible combination (up to 16,570 triangles per game char
 
 See [Original Character Upgrade](ORIGINAL_CHARACTERS.md) for the source, preview,
 motion/furniture contracts and validation commands.
+
+## Lounge staff and cleaning equipment
+
+Employees reuse the project-authored modular human rigs with seeded uniforms and original task poses in `src/entities/EmployeeAvatar.ts`. The bin, litter, mop, tool case, crate, bag, scanner and vending access panel are project-authored Three.js geometry in `src/entities/StaffProps.ts`.

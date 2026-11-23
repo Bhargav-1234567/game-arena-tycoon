@@ -4,6 +4,7 @@ import { OrthographicCamera, Vector3 } from 'three';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { checkInFirstGuest } from '../tests/browser/reception-controls.ts';
 import { MatchBoard } from '../src/puzzle/MatchBoard.ts';
 import { getLevel } from '../src/puzzle/catalog.ts';
 
@@ -29,14 +30,9 @@ try {
     await page.locator('[data-view="lounge"]').click();
     await expect(page.locator('.district-labels')).toBeHidden();
     await expect(page.locator('body')).toHaveAttribute('data-camera-moving', 'false');
-    if (mobile) {
-      for (let i = 0; i < 6; i++) await page.locator('[data-zoom="1.25"]').click();
-      await page.waitForTimeout(100);
-      await expect(page.locator('body')).toHaveAttribute('data-camera-moving', 'false');
-    }
     await page.locator('#btn-toggle-build').click();
     await page.locator('.item-card').filter({ hasText: 'Modern Indoor Planter' }).locator('.buy-btn').click();
-    const zoom = 8 * (mobile ? 1.25 ** 6 : 1), aspect = viewport.width / viewport.height;
+    const aspect = viewport.width / viewport.height, zoom = mobile ? Math.max(8, 14 / aspect) : 8;
     const camera = new OrthographicCamera(-zoom * aspect / 2, zoom * aspect / 2, zoom / 2, -zoom / 2, .1, 1000);
     camera.position.set(40 / Math.sqrt(3), 40 / Math.sqrt(3), 40 / Math.sqrt(3));
     camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
@@ -47,6 +43,10 @@ try {
     await page.mouse.click(x, y);
     await page.screenshot({ path: resolve(folder, `${name}-chair-placement-rejected.png`) });
     await page.locator('#btn-cancel-build').click();
+    await checkInFirstGuest(page);
+    await expect(page.getByRole('progressbar', { name: 'Gaming', exact: true }).first()).toBeVisible({ timeout: 60000 });
+    await page.screenshot({ path: resolve(folder, `${name}-manual-pc-session.png`) });
+    await expect.poll(async () => (await saved()).shift.pc, { timeout: 120000 }).toBeGreaterThan(0);
     await page.getByRole('button', { name: /Puzzle Lab/ }).click();
     await page.getByRole('button', { name: /Start Puzzle 1/ }).click();
     const before = (await saved()).workshop.session;
@@ -62,7 +62,11 @@ try {
     const final = await saved(); assert.equal(final.staff.find((role: any) => role.id === 'technician').hiredCount, 1);
     assert.deepEqual(final.stations.map((station: any) => station.id), initial.stations.map((station: any) => station.id));
     await page.reload(); await expect(page.locator('body')).toHaveAttribute('data-game-ready', 'true', { timeout: 60000 });
-    assert.equal((await saved()).staff.find((role: any) => role.id === 'technician').hiredCount, 1);
+    const restored = await saved();
+    assert.equal(restored.staff.find((role: any) => role.id === 'technician').hiredCount, 1);
+    const hired = final.workforce.employees.find((employee: any) => employee.role === 'technician');
+    assert.ok(hired.name && hired.id);
+    assert.ok(restored.workforce.employees.some((employee: any) => employee.id === hired.id && employee.seed === hired.seed));
     assert.ok(humanRequests.length >= 6);
     assert.ok(humanRequests.every((url) => url.includes('/characters/original/') && url.endsWith('_game.glb')));
     await page.goto(new URL('custom-characters.html', base).href);

@@ -166,6 +166,16 @@ try {
   await click('[data-world-action="close"]'); await hold(2200);
   await caption('Neighborhood Cup', 'A free tournament: serve three paying customers in two minutes. Win $500 and reputation. Puzzle and inventory time is paused.');
   await click('.world-hotspot[data-place="plaza"]'); await click('[data-world-action="tournament"]'); await hold(2200); await click('[data-world-action="close"]');
+  await view('lounge');
+  await caption('Work the counter', 'Use the arrow keys to stand in the mint ring. When check-in finishes, choose a PC for the next guest.');
+  await page.keyboard.down('ArrowLeft');
+  try { await page.waitForFunction(() => document.querySelector('.reception-hint')?.textContent?.includes('At reception')); }
+  finally { await page.keyboard.up('ArrowLeft'); }
+  for (let guest = 0; guest < 3; guest++) await page.locator('.pc-choices button').first().click({ timeout: 60000 });
+  await page.keyboard.down('ArrowRight');
+  try { await page.waitForFunction(() => document.querySelector('.reception-hint')?.textContent?.includes('mint ring')); }
+  finally { await page.keyboard.up('ArrowRight'); }
+  await view('neighborhood');
   await caption('A café partnership', 'Pixel Bites adds five satisfaction points to every gaming station. The one-time partnership is saved with your lounge.');
   await click('.world-hotspot[data-place="cafe"]'); await click('[data-world-action="cafe"]'); await hold(1800); await click('[data-world-action="close"]');
   await caption('Real street arrivals', 'The Circuit Line bus brings visitors. Customers use the crossing and doorway, and traffic yields while they cross.');

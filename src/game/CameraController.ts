@@ -79,7 +79,8 @@ export class CameraController {
 
     window.addEventListener('pointermove', (e) => {
       if (!this.enabled || !this.isDragging) return;
-      if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
+      if (e.pointerType === 'touch') {
+        if (!this.touches.has(e.pointerId)) return;
         this.touches.set(e.pointerId, new THREE.Vector2(e.clientX, e.clientY));
         if (this.touches.size === 2) {
           const points = [...this.touches.values()], distance = points[0].distanceTo(points[1]);
@@ -102,12 +103,18 @@ export class CameraController {
       this.dragStart.set(e.clientX, e.clientY);
     });
 
-    window.addEventListener('pointerup', (event) => {
-      this.touches.delete(event.pointerId); this.pinchDistance = 0;
+    const releaseDrag = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') {
+        if (!this.touches.delete(event.pointerId)) return;
+        this.pinchDistance = 0;
+        const remaining = this.touches.values().next().value;
+        if (remaining) { this.dragStart.copy(remaining); return; }
+      }
       this.isDragging = false;
       this.domElement.style.cursor = 'default';
-    });
-    window.addEventListener('pointercancel', (event) => { this.touches.delete(event.pointerId); this.isDragging = false; this.pinchDistance = 0; });
+    };
+    window.addEventListener('pointerup', releaseDrag);
+    window.addEventListener('pointercancel', releaseDrag);
 
     // Zoom via Wheel
     this.domElement.addEventListener('wheel', (e) => {
@@ -151,7 +158,8 @@ export class CameraController {
     this.mode = view; this.roomBounds = { ...room }; this.isDragging = false;
     this.touches.clear(); this.pinchDistance = 0;
     if (view === 'lounge' && room.maxX - room.minX === 12 && room.maxZ - room.minZ === 10) {
-      this.target.set(0, 0, 0); this.targetZoom = 8;
+      this.target.set(0, 0, 0);
+      this.targetZoom = this.aspect < 1 ? Math.max(8, 14 / this.aspect) : 8;
     } else {
       const bounds = view === 'neighborhood' ? DISTRICT_BOUNDS : room;
       this.target.set((bounds.minX + bounds.maxX) / 2, 0, (bounds.minZ + bounds.maxZ) / 2);

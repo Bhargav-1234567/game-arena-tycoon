@@ -80,6 +80,7 @@ export const SPEAKER_DIMS: Record<number, ComponentDimensions> = {
 export class GamingStation {
   public neighborhoodSatisfactionBonus = 0;
   public isUpgrading = false;
+  public serviceOwner?: string;
   public accessIssue = '';
   public getTechnicianMultiplier: () => number = () => 1;
   public validateLayoutChange?: (chairLevel: number, deskLevel: number) => void;
@@ -112,6 +113,9 @@ export class GamingStation {
   public computedChairZ: number = 0.66;
 
   // Selection & Highlight ring
+  public sessionsSinceService = 0;
+  public get needsService() { return this.sessionsSinceService >= 4; }
+  public assignable = false;
   private selectionRing?: THREE.Mesh;
   public isSelected: boolean = false;
 
@@ -295,6 +299,7 @@ export class GamingStation {
   private async swapComponent<T extends { level: number; model: string }>(tier: T, current: () => T,
     mesh: () => THREE.Group | undefined, apply: (tier: T, model: THREE.Group) => void,
     beforeCommit: () => boolean, validate?: () => void): Promise<void> {
+    if (this.serviceOwner) throw new Error('Wait for the technician to finish this repair.');
     if (this.isUpgrading || !this.group.visible || tier.level !== current().level + 1) throw new Error('This upgrade is no longer available.');
     this.isUpgrading = true;
     try {
@@ -367,6 +372,11 @@ export class GamingStation {
     ));
   }
 
+  public getTechnicianPosition(): THREE.Vector3 {
+    const surface = DESK_SURFACES[this.currentDesk.level];
+    return this.group.localToWorld(new THREE.Vector3(Math.max(.8, surface.maxRightX) + .36, 0, -.05));
+  }
+
   public getApproachWorldPosition(): THREE.Vector3 {
     const chair = CHAIR_DIMS[this.currentChair.level];
     const local = new THREE.Vector3(0, 0, this.computedChairZ + chair.d / 2 + .42);
@@ -390,6 +400,9 @@ export class GamingStation {
   }
 
   public update(time: number) {
+    if (this.selectionRing && !this.isSelected) {
+      (this.selectionRing.material as THREE.MeshBasicMaterial).opacity = this.assignable ? .85 : 0;
+    }
     // Animate RGB glow when active
     if (this.isOccupied) {
       const pulse = 1.0 + Math.sin(time * 6) * 0.25;

@@ -2,7 +2,7 @@ import { CUSTOMER_CHARACTERS } from '../data/characters.ts';
 import { applyCharacterAppearance, randomCharacterAppearance } from '../characters/CharacterAppearance.ts';
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
-import { DISTRICT_PLACES, NAVIGATION, RESERVED_PROPERTY } from '../data/world-layout.ts';
+import { BUS_PASSENGERS, DISTRICT_PLACES, NAVIGATION, RESERVED_PROPERTY } from '../data/world-layout.ts';
 import type { WorldBounds } from '../data/world-layout.ts';
 import type { NeighborhoodState, WorldView } from './NeighborhoodSystem.ts';
 import { FRONTAGE_NAMES } from './NeighborhoodSystem.ts';
@@ -28,7 +28,10 @@ export class NeighborhoodScene {
   private bus?: THREE.Group;
   private busPhase: 'away' | 'arriving' | 'stopped' | 'leaving' = 'away';
   private busStopTime = 0;
-  public onBusStop?: () => void;
+  private passengersReleased = 0;
+  private nextPassengerAt = 0;
+  private passengerLoading = false;
+  public onBusPassenger?: (index: number) => Promise<void>;
   public crossingOccupied: () => boolean = () => false;
 
   constructor(scene: THREE.Scene) {
@@ -292,8 +295,22 @@ export class NeighborhoodScene {
     if (this.bus) {
       if (this.busPhase === 'arriving') {
         this.bus.position.x = Math.max(NAVIGATION.busX, this.bus.position.x - 7 * delta);
-        if (this.bus.position.x <= NAVIGATION.busX) { this.busPhase = 'stopped'; this.busStopTime = 7; this.onBusStop?.(); }
-      } else if (this.busPhase === 'stopped') { this.busStopTime -= delta; if (this.busStopTime <= 0) this.busPhase = 'leaving'; }
+        if (this.bus.position.x <= NAVIGATION.busX) {
+          this.busPhase = 'stopped'; this.busStopTime = 0; this.passengersReleased = 0; this.nextPassengerAt = 0;
+        }
+      } else if (this.busPhase === 'stopped') {
+        this.busStopTime += delta;
+        if (this.passengersReleased < BUS_PASSENGERS && !this.passengerLoading && this.busStopTime >= this.nextPassengerAt) {
+          const index = this.passengersReleased;
+          this.nextPassengerAt = this.busStopTime + .48;
+          if (this.onBusPassenger) {
+            this.passengerLoading = true;
+            this.onBusPassenger(index).then(() => { this.passengersReleased++; }).catch((error) => console.warn('Could not unload bus passenger.', error))
+              .finally(() => { this.passengerLoading = false; });
+          } else this.passengersReleased++;
+        }
+        if (this.busStopTime >= 7 && this.passengersReleased === BUS_PASSENGERS && !this.passengerLoading) this.busPhase = 'leaving';
+      }
       else if (this.busPhase === 'leaving') { this.bus.position.x -= 7 * delta; if (this.bus.position.x < -35) { this.bus.visible = false; this.busPhase = 'away'; } }
     }
   }

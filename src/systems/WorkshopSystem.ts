@@ -53,6 +53,10 @@ export class WorkshopSystem {
     this.value = structuredClone(state);
   }
 
+  hasPerformancePart(stationId: string): boolean {
+    return this.value.parts.some(part => part.stationId === stationId && ['cpu', 'gpu'].includes(getPart(part.partId).slot));
+  }
+
   get state(): WorkshopState { return structuredClone(this.value); }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
 

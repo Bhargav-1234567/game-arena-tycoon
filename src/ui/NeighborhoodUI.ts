@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DISTRICT_PLACES } from '../data/world-layout.ts';
+import { BUS_PASSENGERS, DISTRICT_PLACES } from '../data/world-layout.ts';
 import type { WorldLocation } from '../data/world-layout.ts';
 import { CAFE_PRICE, EVENT_GOAL, FRONTAGE_NAMES, FRONTAGE_PRICES } from '../systems/NeighborhoodSystem.ts';
 import type { NeighborhoodSystem, WorldLighting, WorldView } from '../systems/NeighborhoodSystem.ts';
@@ -109,7 +109,7 @@ export class NeighborhoodUI {
       <button class="workshop-primary" data-world-action="cafe" ${state.cafePartner ? 'disabled' : ''}>${state.cafePartner ? 'Café partnership active · +5 satisfaction' : `Partner with the café · $${CAFE_PRICE}`}</button>`;
     else if (this.selected === 'plaza') content = `<div class="district-hero">🏆</div><h3>Neighborhood Cup</h3><p>Serve ${EVENT_GOAL} paying gaming customers within 120 seconds to earn $500 and +5 reputation. Entry is free. Time pauses while you play puzzles or manage your parts.</p>
       <div class="district-card"><strong data-event-status></strong><p>District titles won: ${state.eventsWon}</p></div><button class="workshop-primary" data-world-action="tournament">Start tournament</button>`;
-    else if (this.selected === 'bus') content = `<div class="district-hero">▣</div><h3>A new crowd is on its way.</h3><p>The Circuit Line arrives every 60 seconds. Watch the bus pull up, wait at the zebra crossing, and bring up to three visitors toward your lounge. Visitors queue when there is space.</p><p data-bus-status></p>`;
+    else if (this.selected === 'bus') content = `<div class="district-hero">▣</div><h3>Circuit Line arrivals</h3><p>Each bus brings ${BUS_PASSENGERS} visitors. They use the zebra crossing and wait outside until a reception place or lounge facility opens up.</p><p data-bus-status></p>`;
     else if (this.selected === 'parking') content = `<div class="district-hero">P</div><h3>Visitor parking & bicycle racks</h3><p>A small parking area and bicycle stands give the street a welcoming entrance. The pavement and doorway remain clear for customers.</p>`;
     else content = `<p>Your lounge is the heart of a compact gaming neighborhood. Pan with right-drag or one finger; zoom with the wheel, pinch or the + / − buttons.</p>
       <div class="district-guide">${DISTRICT_PLACES.map((place) => `<button class="workshop-secondary" data-place="${place.id}">${place.label} →</button>`).join('')}</div>

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { AssetManager } from '../services/AssetManager.ts';
 
-export type FacilityType = 'sofa' | 'vending' | 'arcade';
+import { FACILITY_LAYOUTS, type FacilityType } from '../data/facility-layout.ts';
+export type { FacilityType } from '../data/facility-layout.ts';
 
 export interface FacilityTier {
   level: number;
@@ -10,7 +11,7 @@ export interface FacilityTier {
   model: string;
   perkDescription: string;
   reputationBonus: number;
-  hourlyRevenueBonus?: number;
+  pricePerUse?: number;
   rotationOffset?: number;
   yOffset?: number;
 }
@@ -61,7 +62,7 @@ export const VENDING_TIERS: FacilityTier[] = [
     price: 350,
     model: '/assets/models/business/vending/vending_lvl1.glb',
     perkDescription: 'Cold sodas and water bottles for thirsty players.',
-    hourlyRevenueBonus: 15,
+    pricePerUse: 15,
     reputationBonus: 5,
     rotationOffset: 0
   },
@@ -71,7 +72,7 @@ export const VENDING_TIERS: FacilityTier[] = [
     price: 750,
     model: '/assets/models/business/vending/vending_lvl2.glb',
     perkDescription: 'Energy drinks and chips fuel late-night gaming sessions.',
-    hourlyRevenueBonus: 35,
+    pricePerUse: 35,
     reputationBonus: 15,
     rotationOffset: 0
   },
@@ -81,7 +82,7 @@ export const VENDING_TIERS: FacilityTier[] = [
     price: 1500,
     model: '/assets/models/business/vending/vending_lvl3.glb',
     perkDescription: 'Fresh espresso and noodle bowls for marathon gamers.',
-    hourlyRevenueBonus: 70,
+    pricePerUse: 70,
     reputationBonus: 30,
     rotationOffset: 0
   },
@@ -91,7 +92,7 @@ export const VENDING_TIERS: FacilityTier[] = [
     price: 2800,
     model: '/assets/models/business/vending/vending_lvl4.glb',
     perkDescription: 'Robotic automated snack vendor with touch-screen ordering.',
-    hourlyRevenueBonus: 130,
+    pricePerUse: 130,
     reputationBonus: 55,
     rotationOffset: 0
   }
@@ -104,7 +105,7 @@ export const ARCADE_TIERS: FacilityTier[] = [
     price: 450,
     model: '/assets/models/business/arcade/arcade_lvl1.glb',
     perkDescription: '8-bit retro gaming cabinet with joystick controls.',
-    hourlyRevenueBonus: 20,
+    pricePerUse: 20,
     reputationBonus: 12,
     rotationOffset: 0
   },
@@ -114,27 +115,27 @@ export const ARCADE_TIERS: FacilityTier[] = [
     price: 900,
     model: '/assets/models/business/arcade/arcade_lvl2.glb',
     perkDescription: 'Dual-player fighting cabinet with high-def CRT and stereo sound.',
-    hourlyRevenueBonus: 45,
+    pricePerUse: 45,
     reputationBonus: 25,
     rotationOffset: 0
   },
   {
     level: 3,
-    name: 'Rhythm Dance Stage',
+    name: 'Neon Arcade Cabinet',
     price: 1800,
     model: '/assets/models/business/arcade/arcade_lvl3.glb',
-    perkDescription: 'Illuminated rhythm stage that draws spectators and dancers.',
-    hourlyRevenueBonus: 85,
+    perkDescription: 'Low joystick and button deck beneath a neon marquee.',
+    pricePerUse: 85,
     reputationBonus: 45,
     rotationOffset: 0
   },
   {
     level: 4,
-    name: 'VR Motion Simulator',
+    name: 'Seated Racing Simulator',
     price: 3600,
     model: '/assets/models/business/arcade/arcade_lvl4.glb',
-    perkDescription: 'Full-motion hydraulic simulator cockpit. Top attraction!',
-    hourlyRevenueBonus: 180,
+    perkDescription: 'Take the racing seat and steer on the widescreen racing simulator.',
+    pricePerUse: 180,
     reputationBonus: 80,
     rotationOffset: 0
   }
@@ -153,6 +154,48 @@ export class FacilityEntity {
   private selectionRing?: THREE.Mesh;
   public isSelected: boolean = false;
   public isUpgrading = false;
+  public reservedBy?: string;
+  public serviceOwner?: string;
+  public inUse = false;
+  public salesSinceRefill = 0;
+  public playsSinceService = 0;
+  public get capacity() { return 2 + 2 * this.currentTier.level; }
+  public get stock() { return this.capacity - this.salesSinceRefill; }
+  public get needsService() { return this.type === 'arcade' && this.playsSinceService >= 3; }
+  public validateUpgrade?: (tier: FacilityTier) => void;
+  public onLayoutChanged?: () => void;
+
+  public get layout() { return FACILITY_LAYOUTS[this.type][this.currentTier.level - 1]; }
+
+  public getApproachPosition(): THREE.Vector3 {
+    const [x, z] = this.layout.entry;
+    return this.group.localToWorld(new THREE.Vector3(x, 0, z));
+  }
+
+  public getUsePosition(): THREE.Vector3 {
+    const seat = this.layout.seat;
+    return seat ? this.group.localToWorld(new THREE.Vector3(seat[0], 0, seat[2])) : this.getApproachPosition();
+  }
+
+  public reserve(customerId: string): boolean {
+    if ((this.type === 'vending' && this.stock <= 0) || this.needsService || this.serviceOwner || this.reservedBy || this.isUpgrading || !this.group.visible) return false;
+    this.reservedBy = customerId;
+    return true;
+  }
+
+  public completeUse(customerId: string): number {
+    if (this.reservedBy !== customerId || !this.inUse || !this.group.visible) return 0;
+    this.inUse = false;
+    if (this.type === 'vending') this.salesSinceRefill++;
+    if (this.type === 'arcade') this.playsSinceService++;
+    return this.currentTier.pricePerUse ?? 0;
+  }
+
+  public release(customerId: string): void {
+    if (this.reservedBy !== customerId) return;
+    this.inUse = false;
+    this.reservedBy = undefined;
+  }
 
   constructor(
     id: string,
@@ -239,6 +282,8 @@ export class FacilityEntity {
   }
 
   public async upgrade(nextTier: FacilityTier, beforeCommit: () => boolean = () => true): Promise<void> {
+    if (this.serviceOwner) throw new Error('Wait for the employee to finish servicing the machine.');
+    if (this.reservedBy) throw new Error('Wait for the visitor to finish before upgrading.');
     if (this.isUpgrading || !this.group.visible || nextTier.level !== this.currentTier.level + 1) throw new Error('This upgrade is no longer available.');
     this.isUpgrading = true;
     try {
@@ -246,11 +291,13 @@ export class FacilityEntity {
       model.position.set(0, nextTier.yOffset ?? 0, 0);
       model.rotation.y = nextTier.rotationOffset ?? 0;
       model.traverse((child) => { child.userData.facility = this; });
+      this.validateUpgrade?.(nextTier);
       if (!beforeCommit()) throw new Error('Not enough cash.');
       if (this.mesh) this.group.remove(this.mesh);
       this.currentTier = nextTier;
       this.mesh = model;
       this.group.add(model);
+      this.onLayoutChanged?.();
     } finally { this.isUpgrading = false; }
   }
 }

@@ -52,3 +52,7 @@ and **Quaternius**. They do not describe the new original character family.
 | `wall_corner` | `environment/walls/wall_corner.glb` | Kenney | Mini Arcade Kit (`wall-corner.glb`) | CC0 1.0 Universal | No (Credited) | 2026-11-10 |
 | `character_customer` | `characters/character_customer.glb` | Kenney | Mini Arcade Kit (`character-gamer.glb`) | CC0 1.0 Universal | No (Credited) | 2026-11-10 |
 | `character_employee` | `characters/character_employee.glb` | Kenney | Mini Arcade Kit (`character-employee.glb`) | CC0 1.0 Universal | No (Credited) | 2026-11-10 |
+
+## Lounge staff and cleaning equipment
+
+Employees reuse the project-authored modular human rigs with seeded uniforms and original task poses in `src/entities/EmployeeAvatar.ts`. The bin, litter, mop, tool case, crate, bag, scanner and vending access panel are project-authored Three.js geometry in `src/entities/StaffProps.ts`.

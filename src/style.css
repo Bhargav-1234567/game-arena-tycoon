@@ -595,6 +595,12 @@ body, html {
 }
 
 .stats-modal-card {
+  box-sizing: border-box;
+  max-height: 92vh;
+  max-height: 92dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 76px;
   width: 540px;
   max-width: 92vw;
   background: #172033;
@@ -735,3 +741,60 @@ body, html {
   .build-tabs { overflow-x: auto; }
   .placement-status { bottom: 210px; left: 0; }
 }
+
+.reception-ui { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.reception-ui [hidden], .reception-ui[hidden] { display:none; }
+.reception-panel { position:absolute; top:84px; left:14px; max-width:min(320px,70vw); padding:7px 11px; color:#d5fff1; background:#103434ee; border:1px solid #4c8076; border-radius:8px; font-size:12px; }
+.pc-choices { display:flex; flex-wrap:wrap; gap:5px; max-height:16vh; overflow:auto; pointer-events:auto; }
+.pc-choices button { margin-top:5px; min-height:34px; padding:3px 12px; color:#0b342e; background:#8cf2ce; border:0; border-radius:5px; font-weight:700; cursor:pointer; }
+.guest-activity { position:absolute; transform:translate(-50%,-100%); border-radius:5px; background:#102b35eb; color:#fff; padding:3px 5px; font-size:10px; white-space:nowrap; }
+.guest-activity progress { display:block; width:100%; height:5px; accent-color:#60eac4; }
+.guest-activity i { display:block; height:2px; margin-top:2px; }
+.reception-stick { display:none; position:absolute; bottom:max(98px,env(safe-area-inset-bottom)); right:10px; width:76px; height:76px; background:#143a40dc; border:2px solid #75ceb8; border-radius:50%; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; }
+.reception-stick span { width:32px; height:32px; border-radius:50%; background:#a0e6d4; }
+@media (pointer:coarse) { .reception-stick { display:flex; } .pc-choices button { min-height:44px; } }
+@media (max-width:750px) { .reception-panel { top:100px; left:8px; font-size:11px; } }
+
+.shift-notice { position:absolute; top:126px; left:14px; border:1px solid #76cdb6; background:#173936; color:#e5fff5; padding:9px; border-radius:8px; pointer-events:auto; cursor:pointer; }
+.shift-report { margin-bottom:12px; padding:10px 14px; background:#193539; border-radius:8px; line-height:1.6; font-size:13px; }
+
+.stats-modal-card .modal-header {
+  position: sticky;
+  top: -24px;
+  z-index: 1;
+  margin: -24px -24px 16px;
+  padding: 14px 20px;
+  background: #172033;
+  border-bottom: 1px solid var(--border-color);
+}
+.stats-modal-card .close-btn { min-width: 42px; min-height: 42px; }
+.staff-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.staff-card { padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: #121c2c; }
+.staff-header-row { display: flex; align-items: start; gap: 9px; }
+.staff-info-col { display: grid; gap: 3px; flex: 1; }
+.staff-name { font-weight: 650; }
+.staff-desc, .staff-wage { color: var(--text-muted); font-size: 13px; }
+.staff-wage { white-space: nowrap; }
+.staff-actions-row { display: flex; gap: 8px; margin-top: 6px; }
+.staff-action-btn { min-height: 38px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 650;
+  background: #21453f; color: #d6fff1; border: 1px solid #417e70; border-radius: 7px; cursor: pointer; }
+.staff-action-btn:disabled { opacity: .55; cursor: default; }
+.staff-action-btn.fire-btn { background: transparent; color: #e1c5c0; border-color: #745758; }
+@media (max-width: 600px) {
+  .staff-action-btn, .employee-card select { min-height: 44px; }
+  .stats-modal-card { max-width: 96vw; }
+}
+.employee-roster { display:grid; gap:8px; margin:8px 0 16px; }
+.employee-card { display:grid; gap:6px; padding:12px; background:#172f36; border:1px solid #38545b; border-radius:10px; font-size:13px; }
+.employee-card p { color:#bbd4d5; margin:0; }
+.employee-locate { font:inherit; font-weight:bold; justify-self:start; background:transparent; border:0; color:#99edd8; cursor:pointer; }
+.employee-card select { background:#16343b; color:#ecfff8; padding:6px; border:1px solid #527d76; border-radius:5px; }
+.employee-card .staff-actions-row { flex-wrap:wrap; }
+
+
+.counter-assignment { display: grid; gap: 5px; margin: 12px 0; font-weight: 600; }
+.counter-assignment select { padding: 8px; min-height: 40px; border: 1px solid var(--border-color);
+  border-radius: 7px; background: var(--bg-card); color: var(--text-main); font: inherit; }
+.counter-hire-hint { color: var(--text-muted); margin-bottom: 12px; font-size: 13px; }
+
+.management-links { display: flex; gap: 8px; margin-bottom: 14px; }

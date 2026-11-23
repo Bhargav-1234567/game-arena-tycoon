@@ -86,6 +86,11 @@ try {
   console.log('Chair observation complete');
 
   if (!process.argv.includes('--quick')) {
+    await page.evaluate(() => {
+      const game = (window as any).__auditGame;
+      game.customerSystem.player.group.position.copy(game.placementSystem.receptionDesk.getStaffPosition());
+    });
+    await page.locator('.pc-choices button').first().click({ timeout: 60000 });
     await page.waitForFunction(() => [...(window as any).__auditGame.customerSystem.customers.values()].some((customer: any) => customer.state === 'GAMING'), undefined, { timeout: 30000 });
     const occupied = await page.evaluate(() => {
       const game = (window as any).__auditGame;
@@ -193,7 +198,6 @@ try {
     waiting.targetDesk = movingCounter; waiting.targetDeskId = movingCounter.id;
     waiting.group.position.copy(movingCounter.getCustomerQueuePosition(0)); waiting.moveTo(movingCounter.getCustomerQueuePosition(0), 'WAITING_CHECKIN');
     (crowd as any).customers.set(waiting.id, waiting); (crowd as any).deskQueues.set(movingCounter.id, [waiting]);
-    queueMove.placement.onReceptionMoved = (desk: any) => { void crowd.setupReceptionistForDesk(desk); };
     await queueMove.placement.startMoveReception(movingCounter); queueMove.placement.updateHover(new Vector3(-1.8, 0, 4.2)); await queueMove.placement.tryPlace();
     out.receptionQueueAfterMove = { customer: waiting.group.position.toArray(), oldTarget: (waiting as any).targetPosition.toArray(),
       newQueuePoint: movingCounter.getCustomerQueuePosition(0).toArray(), customerInsideCounter: queueMove.collision.isPointBlocked(waiting.group.position.x, waiting.group.position.z, .28), state: waiting.state };

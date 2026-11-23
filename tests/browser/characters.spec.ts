@@ -161,6 +161,13 @@ test('real original customers sit, type, stand and leave while the original rece
   await page.goto('/'); await expect(page.locator('body')).toHaveAttribute('data-game-ready', 'true', { timeout: 60000 });
   await page.locator('[data-view="lounge"]').click();
   await page.waitForFunction(() => !(window as any).__originalGame.cameraController.isTransitioning);
+  // Isolate the avatar lifecycle. The shift suite drives the counter with native controls.
+  await page.evaluate(() => {
+    const g = (window as any).__originalGame, system = g.customerSystem;
+    system.player.group.position.copy(g.placementSystem.receptionDesk.getStaffPosition());
+    for (let tick=0; tick<720 && !system.pending.length; tick++) system.update(.05);
+  });
+  await page.locator('.pc-choices button').first().click();
   await page.waitForFunction(() => [...(window as any).__originalGame.customerSystem.customers.values()].some((customer: any) => customer.state === 'GAMING'), undefined, { timeout: 60000 });
   const customer = await page.evaluate(() => {
     const game = (window as any).__originalGame;
@@ -173,23 +180,29 @@ test('real original customers sit, type, stand and leave while the original rece
       (window as any).__originalExit = { x: leaving.group.position.x, z: leaving.group.position.z, retries: leaving.routeRetries, journey: leaving.journeyTime };
       finished?.(leaving);
     };
-    const staff = [...game.customerSystem.receptionists.values()][0] as any;
+    const staff = game.customerSystem.player as any;
     return { id: customer.id, clip: customer.currentAction.getClip().name, original: customer.group.children[0].userData.customHuman.original,
       appearance: customer.group.children[0].userData.appearance,
       staffAppearance: staff.group.children[0].userData.appearance,
       looks: [...game.customerSystem.customers.values()].map((person: any) => JSON.stringify(person.group.children[0].userData.appearance)),
       staffOriginal: staff.group.children[0].userData.customHuman.original,
-      staffCount: game.sceneManager.scene.children.filter((node: any) => node.name.startsWith('Receptionist_Employee_')).length,
+      staffCount: game.sceneManager.scene.children.filter((node: any) => node.name === 'Receptionist_Isha').length,
       deskCount: game.placementSystem.receptionDesks.size, rate: customer.assignedStation.getHourlyRevenue(), duration: customer.gamingDuration };
   });
-  expect(customer.original).toBe(true); expect(customer.staffOriginal).toBe(true); expect(customer.clip).toBe('Gaming'); expect(customer.staffCount).toBe(customer.deskCount);
+  expect(customer.original).toBe(true); expect(customer.staffOriginal).toBe(true); expect(customer.clip).toBe('Gaming'); expect(customer.staffCount).toBe(1);
   expect(customer.appearance).toEqual(expect.objectContaining({ top: expect.any(String), hair: expect.any(String), shoes: expect.any(String), shirtColor: expect.stringMatching(/^#[0-9a-f]{6}$/i) }));
   expect(customer.staffAppearance).toMatchObject({ top: 'blazer', bottoms: 'chinos', shirtColor: '#273c53' });
   expect(new Set(customer.looks).size).toBe(customer.looks.length);
   await page.screenshot({ path: info.outputPath('original-people-in-lounge.png') });
-  await page.waitForFunction((id) => (window as any).__originalGame.customerSystem.customers.get(id)?.state === 'UNSEATING', customer.id, { timeout: 45000 });
+  await page.evaluate(id => {
+    const system = (window as any).__originalGame.customerSystem;
+    for (let tick=0; tick<500 && system.customers.get(id)?.state === 'GAMING'; tick++) system.update(.05);
+  }, customer.id);
   expect(await page.evaluate((id) => (window as any).__originalGame.customerSystem.customers.get(id).currentAction.getClip().name, customer.id)).toBe('StandUp');
-  await page.waitForFunction((id) => !(window as any).__originalGame.customerSystem.customers.has(id), customer.id, { timeout: 60000 });
+  await page.evaluate(id => {
+    const system = (window as any).__originalGame.customerSystem;
+    for (let tick=0; tick<1000 && system.customers.has(id); tick++) system.update(.05);
+  },customer.id);
   expect(await page.evaluate(() => (window as any).__originalPayments)).toEqual([Math.round(customer.rate * customer.duration / 15)]);
   const exit = await page.evaluate(() => (window as any).__originalExit);
   expect(Math.abs(exit.x)).toBeGreaterThanOrEqual(13.5); expect(exit.z).toBeGreaterThanOrEqual(9.5);

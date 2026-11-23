@@ -99,6 +99,12 @@ export class ReceptionDesk {
     this.alignMesh(this.mesh);
     this.group.add(this.mesh);
 
+    const marker = new THREE.Mesh(new THREE.RingGeometry(.39, .51, 48),
+      new THREE.MeshBasicMaterial({ color: 0x50f2cf, side: THREE.DoubleSide }));
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.set(0, .035, -2.08);
+    this.group.add(marker);
+
     // Selection highlight ring around reception table
     const ringGeo = new THREE.RingGeometry(1.45, 1.6, 32);
     ringGeo.rotateX(-Math.PI / 2);
@@ -137,7 +143,7 @@ export class ReceptionDesk {
 
   public getStaffPosition(): THREE.Vector3 {
     // Receptionist position behind desk (clear of counter edge so employee never clips table)
-    const local = new THREE.Vector3(0, 0, -1.30);
+    const local = new THREE.Vector3(0, 0, -2.08);
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
     return this.group.position.clone().add(local);
   }
