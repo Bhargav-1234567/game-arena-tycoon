@@ -48,3 +48,31 @@ body[data-world-view=neighborhood] .brand-badge { background: #5d926e; }
   .world-hotspot > span { font-size: 14px; }
   .district-toolbar { width: 305px; }
 }
+
+/* Tactile Game UI Polish for Neighborhood Toolbar & Dialog */
+.district-toolbar {
+  background: linear-gradient(180deg, rgba(19, 44, 62, 0.96), rgba(11, 27, 40, 0.97));
+  border: 2px solid rgba(94, 234, 212, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 12px 32px rgba(0, 12, 24, 0.65);
+}
+
+.district-tools button {
+  border-bottom: 3px solid #162e39;
+  font-weight: 700;
+  transition: transform 0.1s ease;
+}
+
+.district-tools button:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.world-view-switch button[aria-pressed=true] {
+  background: linear-gradient(180deg, #b8f2cf, #89d8aa);
+  border-bottom: 2px solid #48976a;
+}
+
+.district-dialog {
+  background: linear-gradient(180deg, #163345, #0e212e);
+  border: 2px solid rgba(110, 231, 183, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 24px 72px rgba(0, 0, 0, 0.78);
+}

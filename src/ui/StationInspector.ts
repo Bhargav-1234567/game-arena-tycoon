@@ -377,6 +377,10 @@ export class StationInspector {
     this.renderUpgradeState();
   }
 
+  private renderTierPips(level: number, max: number = 4): string {
+    return `<span class="tier-pips" aria-label="Tier ${level} of ${max}">${Array.from({ length: max }, (_, i) => `<i class="${i < level ? 'on' : ''}"></i>`).join('')}</span>`;
+  }
+
   private renderStation() {
     if (!this.currentStation) return;
     const s = this.currentStation;
@@ -426,105 +430,105 @@ export class StationInspector {
         <!-- 1. PC Rig -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">🖥️ PC Rig (Tier ${s.currentPC.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">🖥️ PC Rig</span>${this.renderTierPips(s.currentPC.level)}</div>
             <span class="component-name">${s.currentPC.name}</span>
           </div>
           ${
             nextPC
               ? `<button id="upgrade-pc-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextPC.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextPC.price})
+                  ⬆ $${nextPC.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 2. Display / Monitor -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">📺 Display (Tier ${s.currentMonitor.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">📺 Display</span>${this.renderTierPips(s.currentMonitor.level)}</div>
             <span class="component-name">${s.currentMonitor.name}</span>
           </div>
           ${
             nextMonitor
               ? `<button id="upgrade-monitor-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextMonitor.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextMonitor.price})
+                  ⬆ $${nextMonitor.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 3. Gaming Chair -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">💺 Chair (Tier ${s.currentChair.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">💺 Chair</span>${this.renderTierPips(s.currentChair.level)}</div>
             <span class="component-name">${s.currentChair.name}</span>
           </div>
           ${
             nextChair
               ? `<button id="upgrade-chair-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextChair.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextChair.price})
+                  ⬆ $${nextChair.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 4. Gaming Desk -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">🪵 Desk (Tier ${s.currentDesk.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">🪵 Desk</span>${this.renderTierPips(s.currentDesk.level)}</div>
             <span class="component-name">${s.currentDesk.name}</span>
           </div>
           ${
             nextDesk
               ? `<button id="upgrade-desk-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextDesk.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextDesk.price})
+                  ⬆ $${nextDesk.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 5. Keyboard -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">⌨️ Keyboard (Tier ${s.currentKeyboard.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">⌨️ Keyboard</span>${this.renderTierPips(s.currentKeyboard.level)}</div>
             <span class="component-name">${s.currentKeyboard.name}</span>
           </div>
           ${
             nextKB
               ? `<button id="upgrade-kb-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextKB.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextKB.price})
+                  ⬆ $${nextKB.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 6. Mouse -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">🖱️ Mouse (Tier ${s.currentMouse.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">🖱️ Mouse</span>${this.renderTierPips(s.currentMouse.level)}</div>
             <span class="component-name">${s.currentMouse.name}</span>
           </div>
           ${
             nextMouse
               ? `<button id="upgrade-mouse-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextMouse.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextMouse.price})
+                  ⬆ $${nextMouse.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
 
         <!-- 7. Speakers -->
         <div class="upgrade-row">
           <div class="upgrade-info">
-            <span class="component-tag">🔊 Sound (Tier ${s.currentSpeaker.level}/4)</span>
+            <div class="upgrade-tag-row"><span class="component-tag">🔊 Sound</span>${this.renderTierPips(s.currentSpeaker.level)}</div>
             <span class="component-name">${s.currentSpeaker.name}</span>
           </div>
           ${
             nextSpeaker
               ? `<button id="upgrade-speaker-btn" class="upgrade-action-btn" ${!this.economySystem.canAfford(nextSpeaker.price) ? 'disabled' : ''}>
-                  Upgrade ($${nextSpeaker.price})
+                  ⬆ $${nextSpeaker.price}
                 </button>`
-              : `<span class="max-badge">MAX</span>`
+              : `<span class="max-badge">★ MAX</span>`
           }
         </div>
       </div>
@@ -664,15 +668,25 @@ export class StationInspector {
   private renderHardware(stationId: string): string {
     if (!this.workshop) return '';
     const parts = this.workshop.state.parts;
-    return `<section class="hardware-slots"><h4>Puzzle-earned Parts</h4><p>Collect parts in Puzzle Lab and connect them here. Detached parts return to your inventory.</p>
+    return `<section class="hardware-slots"><div class="hardware-slots-head"><h4>⚡ Rig Loadout Slots</h4><span class="hardware-hint">Puzzle Lab Gear</span></div>
       ${PART_SLOTS.map((slot) => {
         const installed = parts.find((part) => part.stationId === stationId && getPart(part.partId).slot === slot);
         const free = parts.filter((part) => !part.stationId && getPart(part.partId).slot === slot);
-        return `<div class="hardware-slot" data-hardware-slot="${slot}"><div><strong>${SLOT_LABELS[slot]}</strong><small>${free.length} available</small></div>
-          <p>${installed ? getPart(installed.partId).name : 'Empty slot'}</p>
-          ${installed ? `<button data-hardware-detach="${escapeHtml(installed.id)}">Detach</button>` : ''}
-          ${free.length ? `<select data-hardware-select="${slot}" aria-label="${SLOT_LABELS[slot]} part">${free.map((part) => `<option value="${escapeHtml(part.id)}">${getPart(part.partId).name}</option>`).join('')}</select>
-          <button data-hardware-attach="${slot}">${installed ? 'Replace (old part returns to inventory)' : 'Attach'}</button>` : ''}</div>`;
+        const installedDef = installed ? getPart(installed.partId) : null;
+        return `<div class="hardware-slot ${installed ? 'equipped' : 'empty'}" data-hardware-slot="${slot}">
+          <div class="hardware-slot-top">
+            <span class="slot-badge chip-${slot}">${slot.toUpperCase()}</span>
+            <div class="slot-title-col">
+              <strong>${SLOT_LABELS[slot]}</strong>
+              <p class="slot-installed-name">${installedDef ? `${installedDef.name} · T${installedDef.tier}` : 'Empty Socket'}</p>
+            </div>
+            <small class="slot-avail-pill ${free.length ? 'has-free' : ''}">${free.length} free</small>
+          </div>
+          ${installed || free.length ? `<div class="hardware-slot-actions">
+            ${free.length ? `<select data-hardware-select="${slot}" aria-label="${SLOT_LABELS[slot]} part">${free.map((part) => `<option value="${escapeHtml(part.id)}">${getPart(part.partId).name}</option>`).join('')}</select>
+            <button class="slot-attach-btn" data-hardware-attach="${slot}">${installed ? 'Replace (old part returns to inventory)' : 'Equip'}</button>` : ''}
+            ${installed ? `<button class="slot-detach-btn" data-hardware-detach="${escapeHtml(installed.id)}">Detach</button>` : ''}
+          </div>` : ''}</div>`;
       }).join('')}<p class="hardware-error" role="alert">${escapeHtml(this.hardwareError)}</p></section>`;
   }
 }

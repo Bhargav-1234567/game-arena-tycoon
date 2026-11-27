@@ -265,16 +265,16 @@ export class WorkshopUI {
   private inventoryContent(): string {
     const state = this.system.state, stations = this.getStations();
     const available = state.parts.filter((part) => !part.stationId).length;
-    return `<div class="inventory-summary"><div><strong>${state.parts.length}</strong><span>Total owned</span></div><div><strong>${available}</strong><span>Available</span></div><div><strong>${state.parts.length - available}</strong><span>Installed</span></div></div>
-      <p class="workshop-muted">Earn parts in Puzzle Lab, then attach them to any PC. View installed parts in its inspector, or detach them to use in another PC.</p>
+    return `<div class="inventory-summary"><div class="inv-stat-total"><strong>${state.parts.length}</strong><span>Total owned</span></div><div class="inv-stat-avail"><strong>${available}</strong><span>Available</span></div><div class="inv-stat-equipped"><strong>${state.parts.length - available}</strong><span>Installed</span></div></div>
+      <p class="workshop-muted">Earn parts in Puzzle Lab, then socket them into any PC. View equipped parts in the Rig Inspector, or detach them anytime.</p>
       ${!state.parts.length ? '<div class="inventory-empty"><span>▣</span><h3>Your next upgrade is waiting.</h3><p>Win your first puzzle to collect a part.</p><button class="workshop-primary" data-action="puzzle">Play a puzzle →</button></div>' : `<div class="inventory-grid">${HARDWARE_PARTS.filter((definition) => state.parts.some((part) => part.partId === definition.id)).map((definition) => {
         const copies = state.parts.filter((part) => part.partId === definition.id);
         const free = copies.filter((part) => !part.stationId);
-        return `<article class="inventory-card"><div class="part-chip chip-${definition.slot}">${definition.slot.toUpperCase()}</div><span class="workshop-eyebrow">TIER ${definition.tier} · ${definition.detail}</span><h3>${definition.name}</h3>
-        <p><b>${free.length}</b> available · ${copies.length - free.length} installed · ${copies.length} owned</p>
+        return `<article class="inventory-card tier-${definition.tier}"><div class="inv-card-top"><div class="part-chip chip-${definition.slot}">${definition.slot.toUpperCase()}</div><span class="inv-tier-pill">TIER ${definition.tier}</span></div><span class="workshop-eyebrow">${definition.detail}</span><h3>${definition.name}</h3>
+        <p class="inv-stock-line"><b>${free.length}</b> available · ${copies.length - free.length} installed · ${copies.length} owned</p>
         ${free.length && stations.length ? `<label>Attach to PC<select data-equip-station="${definition.id}">${stations.map((station) => `<option value="${escapeHtml(station.id)}">${escapeHtml(station.name)}</option>`).join('')}</select></label>
         <button class="workshop-primary" data-attach="${escapeHtml(free[0].id)}" data-part="${definition.id}" data-slot="${definition.slot}">Attach part</button><small class="equip-note" data-note="${definition.id}"></small>` : `<p class="workshop-muted">${!stations.length ? 'Build a PC to install this part.' : 'All copies are installed.'}</p>`}
-        ${copies.filter((part) => part.stationId).map((part) => `<div class="installed-copy"><span>${escapeHtml(stations.find((station) => station.id === part.stationId)?.name ?? 'PC')}</span>
+        ${copies.filter((part) => part.stationId).map((part) => `<div class="installed-copy"><span>🖥 ${escapeHtml(stations.find((station) => station.id === part.stationId)?.name ?? 'PC')}</span>
         <button class="workshop-secondary" data-detach="${escapeHtml(part.id)}" data-station="${escapeHtml(part.stationId!)}">Detach</button></div>`).join('')}</article>`;
       }).join('')}</div>`}`;
   }

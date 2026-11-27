@@ -19,7 +19,7 @@ export class ReceptionUI {
   constructor(parent: HTMLElement, system: CustomerSystem, placement: PlacementSystem, enabled: () => boolean) {
     this.root.className = 'reception-ui';
     this.root.hidden = true;
-    this.root.innerHTML = `<div class="reception-panel"><span class="reception-hint"></span><div class="pc-choices"></div></div>
+    this.root.innerHTML = `<div class="reception-panel"><div class="reception-header"><span class="reception-badge">🎮 CHECK-IN DESK</span><span class="reception-queue-pill" hidden></span></div><span class="reception-hint"></span><div class="pc-choices"></div></div>
       <div class="reception-stick" role="group" aria-label="Move receptionist"><span></span></div>`;
     parent.append(this.root);
     this.hint = this.root.querySelector('.reception-hint')!;
@@ -81,10 +81,17 @@ export class ReceptionUI {
     const head = system.pending[0];
     const available = [...placement.stations.values()].map((station, i) => ({ station, index: i+1 })).filter(s => s.station.assignable);
     const staffed = [...placement.receptionDesks.values()].some(desk => system.workforce?.receptionistAt(desk));
+    const panel = this.root.querySelector<HTMLElement>('.reception-panel');
+    const queuePill = this.root.querySelector<HTMLElement>('.reception-queue-pill');
+    panel?.classList.toggle('has-guest', !!head);
+    if (queuePill) {
+      queuePill.hidden = system.pending.length === 0;
+      queuePill.textContent = `${system.pending.length} waiting`;
+    }
     this.hint.textContent = head ? (available.length ? (head.wantsPerformance ? 'Assign a PC · GPU or CPU earns +25%' : 'Assign a PC to the next guest') : 'Waiting for a PC')
       : system.activeDesk ? 'Isha · At reception' : staffed ? 'Reception staffed · Automatic check-in' : (matchMedia('(pointer:coarse)').matches ? 'Joystick' : 'Arrow keys')+' · Stand in the mint ring to check in';
     const options = head ? available.map(({ station, index }) => ({ id: station.id,
-      name: 'PC '+index+(head.wantsPerformance && system.hasPerformancePart(station.id) ? ' ⚡' : '') })) : [];
+      name: '🖥 PC '+index+(head.wantsPerformance && system.hasPerformancePart(station.id) ? ' ⚡' : '') })) : [];
     const signature = JSON.stringify(options);
     if (signature !== this.lastChoices) {
       this.choices.replaceChildren(...options.map(option => {

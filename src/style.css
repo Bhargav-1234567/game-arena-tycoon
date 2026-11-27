@@ -797,4 +797,620 @@ body, html {
   border-radius: 7px; background: var(--bg-card); color: var(--text-main); font: inherit; }
 .counter-hire-hint { color: var(--text-muted); margin-bottom: 12px; font-size: 13px; }
 
-.management-links { display: flex; gap: 8px; margin-bottom: 14px; }
+.management-links { display: flex; gap: 10px; margin-bottom: 16px; }
+
+/* ==========================================================================
+   GAME UI OVERHAUL: CYBER-ARCADE TYCOON THEME (Replaces ERP look)
+   ========================================================================== */
+
+/* Tactile 3D Game Buttons */
+.primary-action-btn,
+.secondary-btn,
+.danger-btn,
+.topbar-btn,
+.upgrade-action-btn,
+.move-item-btn,
+.buy-btn,
+.staff-action-btn {
+  border-bottom-width: 3px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.15s ease;
+}
+
+.primary-action-btn:active:not(:disabled),
+.secondary-btn:active:not(:disabled),
+.danger-btn:active:not(:disabled),
+.topbar-btn:active:not(:disabled),
+.upgrade-action-btn:active:not(:disabled),
+.move-item-btn:active:not(:disabled),
+.buy-btn:active:not(:disabled),
+.staff-action-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* TopBar Polish */
+.topbar {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+  box-shadow: 0 6px 24px rgba(2, 6, 23, 0.55);
+}
+
+.stat-pill {
+  background: linear-gradient(180deg, rgba(28, 40, 66, 0.95), rgba(15, 23, 42, 0.95));
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+.cash-pill {
+  border-color: rgba(16, 185, 129, 0.65);
+  background: linear-gradient(180deg, rgba(16, 62, 52, 0.95), rgba(10, 38, 34, 0.95));
+}
+
+.topbar-btn {
+  background: linear-gradient(180deg, #1e2d48, #131f33);
+  border: 2px solid #385073;
+  border-bottom-color: #22324a;
+  border-radius: 12px;
+  padding: 7px 14px;
+  font-weight: 700;
+}
+
+.topbar-btn:hover {
+  border-color: #2dd4bf;
+  background: linear-gradient(180deg, #25395b, #172740);
+}
+
+/* Build Panel & Catalog Cards */
+.build-panel {
+  background: linear-gradient(180deg, rgba(20, 31, 54, 0.97), rgba(11, 18, 34, 0.98));
+  border: 2px solid #2dd4bf66;
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 42px rgba(0, 0, 0, 0.65);
+}
+
+.tab-btn {
+  border-radius: 10px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+}
+
+.tab-btn.active {
+  background: linear-gradient(180deg, rgba(13, 148, 136, 0.35), rgba(13, 148, 136, 0.15));
+  border: 1px solid #2dd4bf88;
+  color: #5eead4;
+}
+
+.item-card {
+  background: linear-gradient(180deg, rgba(25, 38, 64, 0.9), rgba(15, 23, 42, 0.95));
+  border: 2px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+}
+
+.item-card:hover:not(.disabled) {
+  border-color: #2dd4bf;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(13, 148, 136, 0.25);
+}
+
+.buy-btn {
+  background: linear-gradient(180deg, #14b8a6, #0d9488);
+  border: 1px solid #5eead4;
+  border-bottom: 3px solid #0f766e;
+  border-radius: 8px;
+  padding: 5px 14px;
+}
+
+/* ==========================================================================
+   PC ASSIGNMENT MODULE (ReceptionUI -> Live Check-In Dispatch Pod)
+   ========================================================================== */
+.reception-panel {
+  top: 82px;
+  left: 18px;
+  max-width: min(360px, 78vw);
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(13, 42, 52, 0.96), rgba(9, 25, 34, 0.96));
+  border: 2px solid #2d6a6e;
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 10px 28px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.reception-panel.has-guest {
+  border-color: #34d399;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 24px rgba(52, 211, 153, 0.28), 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.reception-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.reception-badge {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  color: #5eead4;
+  background: rgba(13, 148, 136, 0.25);
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.reception-queue-pill {
+  font-size: 10px;
+  font-weight: 800;
+  color: #062b22;
+  background: #fbbf24;
+  padding: 2px 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
+}
+
+.reception-hint {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2faf3;
+  line-height: 1.4;
+}
+
+.pc-choices {
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.pc-choices button {
+  margin-top: 0;
+  min-height: 36px;
+  padding: 6px 13px;
+  color: #052e27;
+  background: linear-gradient(180deg, #99f6e4, #5eead4);
+  border: 1px solid #ccfbf1;
+  border-bottom: 3px solid #0d9488;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s, filter 0.15s;
+}
+
+.pc-choices button:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.pc-choices button:active {
+  transform: translateY(2px);
+}
+
+.guest-activity {
+  border: 1px solid rgba(94, 234, 212, 0.45);
+  border-radius: 9px;
+  background: rgba(9, 25, 36, 0.94);
+  padding: 4px 7px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* ==========================================================================
+   UPGRADE / RIG INSPECTOR (StationInspector -> Rig Loadout Panel)
+   ========================================================================== */
+.station-inspector {
+  background: linear-gradient(180deg, rgba(19, 30, 52, 0.97), rgba(11, 18, 33, 0.98));
+  border: 2px solid rgba(56, 189, 248, 0.35);
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 18px 46px rgba(0, 0, 0, 0.65);
+}
+
+.inspector-badge {
+  border-radius: 6px;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.game-close-btn,
+.station-inspector .close-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-bottom: 2px solid rgba(15, 23, 42, 0.9);
+  color: #cbd5e1;
+}
+
+.game-close-btn:hover,
+.station-inspector .close-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #f87171;
+  color: #fff;
+}
+
+.metric-item {
+  background: linear-gradient(180deg, rgba(24, 38, 64, 0.9), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+}
+
+.upgrade-row {
+  background: linear-gradient(180deg, rgba(23, 35, 60, 0.92), rgba(14, 22, 40, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.upgrade-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.tier-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.tier-pips i {
+  display: block;
+  width: 10px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.tier-pips i.on {
+  background: linear-gradient(90deg, #38bdf8, #2dd4bf);
+  box-shadow: 0 0 6px rgba(45, 212, 191, 0.55);
+}
+
+.upgrade-action-btn {
+  background: linear-gradient(180deg, #a855f7, #7c3aed);
+  border: 1px solid #c084fc;
+  border-bottom: 3px solid #5b21b6;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.max-badge {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.18));
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.8px;
+}
+
+.counter-assignment {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   MANAGEMENT POPUP (StatsModal -> Arcade HQ Command Center)
+   ========================================================================== */
+.stats-modal-card {
+  width: 600px;
+  background: linear-gradient(180deg, #162238 0%, #0d1626 100%);
+  border: 2px solid #38bdf866;
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 24px 64px rgba(0, 0, 0, 0.75);
+}
+
+.stats-modal-card .modal-header {
+  background: linear-gradient(180deg, #1c2c47, #152136);
+  border-bottom: 2px solid rgba(56, 189, 248, 0.25);
+}
+
+.modal-eyebrow {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #38bdf8;
+  margin-bottom: 2px;
+}
+
+.tier-badge {
+  border-radius: 10px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.jump-pill {
+  flex: 1;
+  background: linear-gradient(180deg, #1f3352, #15243b) !important;
+  border: 1px solid #3b5984 !important;
+  border-bottom: 3px solid #0f1b2e !important;
+  border-radius: 11px !important;
+  color: #e2e8f0 !important;
+}
+
+.jump-pill:hover {
+  border-color: #38bdf8 !important;
+}
+
+/* Shift Scorecard */
+.shift-report {
+  background: linear-gradient(180deg, rgba(16, 44, 58, 0.9), rgba(11, 28, 39, 0.95));
+  border: 2px solid rgba(45, 212, 191, 0.35);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.shift-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.shift-report-head h4 {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #e2faf3;
+}
+
+.shift-day-pill {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #052e27;
+  background: #5eead4;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+
+.shift-score-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shift-score-tile {
+  background: rgba(9, 20, 32, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shift-score-tile span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.shift-score-tile b {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.shift-score-tile small {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* Dashboard KPI Tiles */
+.dash-card {
+  background: linear-gradient(180deg, rgba(24, 36, 58, 0.92), rgba(14, 22, 38, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-top-width: 3px;
+  border-radius: 14px;
+}
+
+.dash-accent-teal { border-top-color: #2dd4bf; }
+.dash-accent-amber { border-top-color: #fbbf24; }
+.dash-accent-purple { border-top-color: #a855f7; }
+.dash-accent-slate { border-top-color: #64748b; }
+
+/* Crew Roster & Hiring Cards */
+.player-crew-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(13, 148, 136, 0.25), rgba(15, 23, 42, 0.85));
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  border-radius: 12px;
+}
+
+.player-crew-banner div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-crew-banner small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.player-crew-tag {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #052e27;
+  background: #5eead4;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.employee-card,
+.staff-card {
+  background: linear-gradient(180deg, rgba(24, 38, 60, 0.92), rgba(14, 24, 40, 0.96));
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.employee-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.employee-avatar,
+.staff-icon-badge {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  flex-shrink: 0;
+}
+
+.employee-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.employee-name-row,
+.staff-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.employee-stars {
+  color: #fbbf24;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.employee-role-badge {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.employee-role-badge b {
+  color: #34d399;
+}
+
+.employee-status-line {
+  font-size: 12px;
+  color: #bae6fd;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 5px 8px;
+  border-radius: 7px;
+}
+
+.employee-select-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.employee-select-label select {
+  flex: 1;
+  max-width: 210px;
+}
+
+.staff-count-pill {
+  font-size: 10px;
+  font-weight: 800;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.staff-wage {
+  font-weight: 800;
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.promote-btn,
+.hire-btn {
+  background: linear-gradient(180deg, #10b981, #059669) !important;
+  border-color: #34d399 !important;
+  border-bottom-color: #047857 !important;
+  color: #022c22 !important;
+  font-weight: 800 !important;
+}
+
+.max-rank-pill {
+  font-size: 11px;
+  font-weight: 900;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.owed-payroll-alert {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.save-toast {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.save-toast.success {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid #34d399;
+  color: #a7f3d0;
+}
+
+.save-toast.error {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid #f87171;
+  color: #fecaca;
+}
+
+.shift-notice {
+  border: 2px solid #5eead4;
+  border-bottom-width: 3px;
+  background: linear-gradient(180deg, #134e4a, #0f3a38);
+  color: #ecfdf5;
+  font-weight: 800;
+  font-size: 12px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 600px) {
+  .shift-score-grid {
+    grid-template-columns: 1fr;
+  }
+}

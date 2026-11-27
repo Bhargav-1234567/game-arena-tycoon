@@ -25,7 +25,7 @@ export class StatsModal {
       if (text) text.textContent = this.employeeStatus(e);
     }
     const current = this.element.querySelector('[data-current-shift]');
-    if (current && this.operations) current.innerHTML = this.report(this.operations.shift,'Current shift');
+    if (current && this.operations) current.innerHTML = this.report(this.operations.shift, 'Live Shift');
   }
 
   private employeeStatus(e: Employee) {
@@ -40,13 +40,22 @@ export class StatsModal {
     const seconds = (entry: Employee) => (e.role === 'receptionist' ? 2/(1+.35*efficiency(entry)) :
       JOB_SECONDS[ROLE_JOB[e.role]]/efficiency(entry)).toFixed(1);
     const options = this.workforce?.priorityOptions(e) ?? [];
+    const stars = '★'.repeat(e.raises + 1) + '☆'.repeat(Math.max(0, MAX_RAISES - e.raises));
     return `<article class="employee-card">
-      <button class="employee-locate" data-locate="${e.id}" title="Find employee in lounge">${escapeHtml(e.name)} ↗</button>
-      <span>${role.name} · $${wage(e)}/hr</span>
-      <p data-staff-status="${e.id}">${escapeHtml(this.employeeStatus(e))}</p>
-      <label>${e.role==='receptionist' ? 'Assigned counter' : 'Priority'} <select data-priority="${e.id}">${options.map(([id,name])=>`<option value="${escapeHtml(id)}" ${id===e.priority?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label>
+      <div class="employee-card-top">
+        <div class="employee-avatar">${role.icon}</div>
+        <div class="employee-meta">
+          <div class="employee-name-row">
+            <button class="employee-locate" data-locate="${e.id}" title="Find employee in lounge">${escapeHtml(e.name)} ↗</button>
+            <span class="employee-stars" title="Skill Rank">${stars}</span>
+          </div>
+          <span class="employee-role-badge">${role.name} · <b>$${wage(e)}/hr</b></span>
+        </div>
+      </div>
+      <p class="employee-status-line" data-staff-status="${e.id}">${escapeHtml(this.employeeStatus(e))}</p>
+      <label class="employee-select-label"><span>${e.role==='receptionist' ? 'Assigned counter' : 'Priority'}</span> <select data-priority="${e.id}">${options.map(([id,name])=>`<option value="${escapeHtml(id)}" ${id===e.priority?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label>
       <div class="staff-actions-row">
-      ${e.raises<MAX_RAISES ? `<button class="staff-action-btn" data-raise="${e.id}">Raise to $${wage(next)}/hr · ${seconds(e)} → ${seconds(next)} s</button>` : '<span>Highest pay grade</span>'}
+      ${e.raises<MAX_RAISES ? `<button class="staff-action-btn promote-btn" data-raise="${e.id}">⬆ Promote ($${wage(next)}/hr · ${seconds(e)}→${seconds(next)}s)</button>` : '<span class="max-rank-pill">★ MAX RANK</span>'}
       <button class="staff-action-btn fire-btn" data-dismiss="${e.id}">Dismiss</button></div></article>`;
   }
   private notice?: HTMLButtonElement;
@@ -57,7 +66,7 @@ export class StatsModal {
     if (!day) return;
     const notice = document.createElement('button');
     notice.className = 'shift-notice';
-    notice.textContent = 'Day '+day+' complete · View results';
+    notice.textContent = '🏆 Day '+day+' complete · View results';
     notice.onclick = () => this.open();
     this.element.parentElement?.append(notice);
     this.notice = notice;
@@ -66,11 +75,20 @@ export class StatsModal {
 
   private report(shift: ShiftResult, title: string) {
     const average = shift.waitSamples ? (shift.waitSeconds / shift.waitSamples).toFixed(1)+' s' : '—';
-    return `<section class="shift-report"><h4>${title} · Day ${shift.day}</h4>
-      <p>Served ${shift.served} · Lost ${shift.lost} · Average queue wait ${average}</p>
-      <p>PC $${shift.pc} · Vending $${shift.vending} · Arcade $${shift.arcade}</p>
-      <p>Wages paid $${shift.wages ?? 0} · After payroll $${shift.pc+shift.vending+shift.arcade-(shift.wages ?? 0)}</p>
-      <p>Staff jobs ${shift.jobs ?? 0} · Machine downtime ${Math.round(shift.downtime ?? 0)} machine-seconds</p></section>`;
+    const gross = shift.pc + shift.vending + shift.arcade;
+    const net = gross - (shift.wages ?? 0);
+    return `<section class="shift-report">
+      <div class="shift-report-head">
+        <h4>${title}</h4>
+        <span class="shift-day-pill">DAY ${shift.day}</span>
+      </div>
+      <div class="shift-score-grid">
+        <div class="shift-score-tile"><span>Guests</span><b>${shift.served} served · ${shift.lost} lost</b><small>Avg wait ${average}</small></div>
+        <div class="shift-score-tile"><span>Revenue</span><b class="text-teal">$${gross}</b><small>PC $${shift.pc} · Vend $${shift.vending} · Arc $${shift.arcade}</small></div>
+        <div class="shift-score-tile"><span>Payroll & Net</span><b class="${net >= 0 ? 'text-amber' : 'text-red'}">${net >= 0 ? '+' : ''}$${net}</b><small>Wages $${shift.wages ?? 0}</small></div>
+        <div class="shift-score-tile"><span>Operations</span><b>${shift.jobs ?? 0} jobs</b><small>${Math.round(shift.downtime ?? 0)}s downtime</small></div>
+      </div>
+    </section>`;
   }
   public onSave?: () => boolean;
   private element: HTMLElement;
@@ -146,47 +164,55 @@ export class StatsModal {
         <div class="modal-header">
           <div class="modal-title-wrap">
             <span class="tier-badge" style="background: ${tier.color};">${tier.badge}</span>
-            <h3>${tier.name}</h3>
+            <div>
+              <span class="modal-eyebrow">LOUNGE HQ</span>
+              <h3>${tier.name}</h3>
+            </div>
           </div>
-          <button id="close-stats-btn" class="close-btn" aria-label="Close management">✕</button>
+          <button id="close-stats-btn" class="close-btn game-close-btn" aria-label="Close management">✕</button>
         </div>
 
         <nav class="management-links" aria-label="Staff management">
-          <button type="button" class="staff-action-btn" data-jump="hiring">Hire staff</button>
-          <button type="button" class="staff-action-btn" data-jump="roster">Manage employees</button>
+          <button type="button" class="staff-action-btn jump-pill" data-jump="roster">👥 Crew Roster</button>
+          <button type="button" class="staff-action-btn jump-pill" data-jump="hiring">🤝 Recruit Staff</button>
         </nav>
-        ${this.operations?.previous ? this.report(this.operations.previous, 'Completed shift') : ''}
-        <div data-current-shift>${this.operations ? this.report(this.operations.shift, 'Current shift') : ''}</div>
+        ${this.operations?.previous ? this.report(this.operations.previous, 'Completed Shift') : ''}
+        <div data-current-shift>${this.operations ? this.report(this.operations.shift, 'Live Shift') : ''}</div>
         <div class="dashboard-grid">
-          <div class="dash-card">
-            <span class="dash-label">Estimated PC income after payroll</span>
+          <div class="dash-card dash-accent-teal">
+            <span class="dash-label">⚡ Net PC Income</span>
             <span class="dash-val ${netHourly >= 0 ? 'text-teal' : 'text-red'}">
               ${netHourly >= 0 ? '+' : ''}$${netHourly}/hr
             </span>
           </div>
 
-          <div class="dash-card">
-            <span class="dash-label">Business Valuation</span>
+          <div class="dash-card dash-accent-amber">
+            <span class="dash-label">🏆 Arena Valuation</span>
             <span class="dash-val text-amber">$${valuation.toLocaleString()}</span>
           </div>
 
-          <div class="dash-card">
-            <span class="dash-label">Operational BattleStations</span>
+          <div class="dash-card dash-accent-purple">
+            <span class="dash-label">🖥️ Active Rigs</span>
             <span class="dash-val">${this.placement.stations.size} Units</span>
           </div>
 
-          <div class="dash-card">
-            <span class="dash-label">Hourly Payroll (Staff)</span>
+          <div class="dash-card dash-accent-slate">
+            <span class="dash-label">💳 Staff Payroll</span>
             <span class="dash-val text-muted">-$${wages}/hr</span>
           </div>
         </div>
 
-        <h4 id="roster" class="section-title">Employees on shift</h4>
-        <div class="employee-roster"><p>Isha · Player receptionist · $15/hr</p>
+        <h4 id="roster" class="section-title">Active Shift Crew</h4>
+        <div class="employee-roster">
+          <div class="player-crew-banner">
+            <span class="employee-avatar">🎮</span>
+            <div><strong>Isha · Player Receptionist</strong><small>Lead Operator · $15/hr</small></div>
+            <span class="player-crew-tag">YOU</span>
+          </div>
           ${this.staff.employees.map(e=>this.employeeCard(e)).join('')}
-          ${this.staff.owed ? `<p>Outstanding payroll $${this.staff.owed}</p>` : ''}
+          ${this.staff.owed ? `<p class="owed-payroll-alert">⚠️ Outstanding payroll: $${this.staff.owed}</p>` : ''}
         </div>
-        <h4 id="hiring" class="section-title">Hire staff</h4>
+        <h4 id="hiring" class="section-title">Recruit Crew</h4>
         <div class="staff-list">
           ${this.staff.roles
             .map((role) => {
@@ -197,16 +223,19 @@ export class StatsModal {
               return `
               <div class="staff-card">
                 <div class="staff-header-row">
-                  <span class="staff-icon">${role.icon}</span>
+                  <span class="staff-icon-badge">${role.icon}</span>
                   <div class="staff-info-col">
-                    <span class="staff-name">${role.name} (${role.hiredCount-player}/${role.maxCount-player} hired)</span>
+                    <div class="staff-name-row">
+                      <span class="staff-name">${role.name}</span>
+                      <span class="staff-count-pill">${role.hiredCount-player}/${role.maxCount-player}</span>
+                    </div>
                     <span class="staff-desc">${role.perkDescription}</span>
                   </div>
-                  <span class="staff-wage text-muted">$${role.wagePerHour}/hr</span>
+                  <span class="staff-wage">$${role.wagePerHour}/hr</span>
                 </div>
                 <div class="staff-actions-row">
                   <button class="staff-action-btn hire-btn" data-role="${role.id}" ${!canHire ? 'disabled' : ''}>
-                    Hire ${role.name} ($${role.hiringCost})
+                    Hire ${role.name} · $${role.hiringCost}
                   </button>
 
                 </div>
@@ -216,12 +245,13 @@ export class StatsModal {
             .join('')}
         </div>
 
+        <p id="save-toast" class="save-toast" role="status" hidden></p>
         <div class="manage-actions-row" style="margin-top: 18px;">
           <button id="save-game-btn" class="modal-action-btn primary-action-btn">
-            💾 Save Game Progress
+            💾 Save Progress
           </button>
           <button id="reset-game-btn" class="modal-action-btn danger-btn">
-            ⚠️ Reset & Start Over
+            ⚠️ Reset Lounge
           </button>
         </div>
       </div>
@@ -266,10 +296,19 @@ export class StatsModal {
 
     // Save Game Progress
     this.element.querySelector('#save-game-btn')?.addEventListener('click', () => {
+      const toast = this.element.querySelector<HTMLElement>('#save-toast');
       if (this.onSave?.()) {
         SoundManager.getInstance().playUpgrade();
-        alert('Lounge, parts, diamonds and puzzle progress saved successfully!');
-      } else alert('Could not save. Finish placing or moving your item, check browser storage, and try again.');
+        if (toast) {
+          toast.textContent = '✅ Lounge, parts, diamonds and puzzle progress saved!';
+          toast.className = 'save-toast success';
+          toast.hidden = false;
+        }
+      } else if (toast) {
+        toast.textContent = '⚠️ Could not save. Finish placing or moving your item and try again.';
+        toast.className = 'save-toast error';
+        toast.hidden = false;
+      }
     });
 
     // Reset Game Progress
